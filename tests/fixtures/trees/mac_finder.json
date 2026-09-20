@@ -1,0 +1,250 @@
+{
+  "role": "application",
+  "label": "application 1",
+  "enabled": true,
+  "bbox": null,
+  "children": [
+    {
+      "role": "AXScrollArea",
+      "label": "ScrollArea 1",
+      "enabled": false,
+      "bbox": [
+        0,
+        0,
+        1920,
+        1080
+      ],
+      "children": [
+        {
+          "role": "AXGroup",
+          "label": "Group 1",
+          "enabled": true,
+          "bbox": [
+            0,
+            0,
+            1920,
+            1080
+          ],
+          "children": [
+            {
+              "role": "AXImage",
+              "label": "Image 1",
+              "enabled": true,
+              "bbox": [
+                1457,
+                33,
+                64,
+                64
+              ],
+              "children": []
+            },
+            {
+              "role": "AXImage",
+              "label": "Image 2",
+              "enabled": true,
+              "bbox": [
+                255,
+                529,
+                64,
+                64
+              ],
+              "children": []
+            },
+            {
+              "role": "AXImage",
+              "label": "Image 3",
+              "enabled": true,
+              "bbox": [
+                1457,
+                369,
+                64,
+                64
+              ],
+              "children": []
+            },
+            {
+              "role": "AXImage",
+              "label": "Image 4",
+              "enabled": true,
+              "bbox": [
+                1775,
+                84,
+                64,
+                64
+              ],
+              "children": []
+            },
+            {
+              "role": "AXImage",
+              "label": "Image 5",
+              "enabled": true,
+              "bbox": [
+                1766,
+                222,
+                64,
+                64
+              ],
+              "children": []
+            },
+            {
+              "role": "AXImage",
+              "label": "Image 6",
+              "enabled": true,
+              "bbox": [
+                1581,
+                858,
+                64,
+                64
+              ],
+              "children": []
+            },
+            {
+              "role": "AXImage",
+              "label": "Image 7",
+              "enabled": true,
+              "bbox": [
+                1823,
+                618,
+                64,
+                64
+              ],
+              "children": []
+            },
+            {
+              "role": "AXImage",
+              "label": "Image 8",
+              "enabled": true,
+              "bbox": [
+                1533,
+                241,
+                64,
+                64
+              ],
+              "children": []
+            },
+            {
+              "role": "AXImage",
+              "label": "Image 9",
+              "enabled": true,
+              "bbox": [
+                1579,
+                382,
+                64,
+                64
+              ],
+              "children": []
+            },
+            {
+              "role": "AXImage",
+              "label": "Image 10",
+              "enabled": true,
+              "bbox": [
+                1579,
+                618,
+                64,
+                64
+              ],
+              "children": []
+            },
+            {
+              "role": "AXImage",
+              "label": "Image 11",
+              "enabled": true,
+              "bbox": [
+                1823,
+                382,
+                64,
+                64
+              ],
+              "children": []
+            },
+            {
+              "role": "AXImage",
+              "label": "Image 12",
+              "enabled": true,
+              "bbox": [
+                1823,
+                730,
+                64,
+                64
+              ],
+              "children": []
+            },
+            {
+              "role": "AXImage",
+              "label": "Image 13",
+              "enabled": true,
+              "bbox": [
+                1823,
+                842,
+                64,
+                64
+              ],
+              "children": []
+            },
+            {
+              "role": "AXImage",
+              "label": "Image 14",
+              "enabled": true,
+              "bbox": [
+                1701,
+                382,
+                64,
+                64
+              ],
+              "children": []
+            },
+            {
+              "role": "AXImage",
+              "label": "Image 15",
+              "enabled": true,
+              "bbox": [
+                1701,
+                618,
+                64,
+                64
+              ],
+              "children": []
+            },
+            {
+              "role": "AXImage",
+              "label": "Image 16",
+              "enabled": true,
+              "bbox": [
+                1701,
+                730,
+                64,
+                64
+              ],
+              "children": []
+            },
+            {
+              "role": "AXImage",
+              "label": "Image 17",
+              "enabled": true,
+              "bbox": [
+                1701,
+                842,
+                64,
+                64
+              ],
+              "children": []
+            },
+            {
+              "role": "AXImage",
+              "label": "Image 18",
+              "enabled": true,
+              "bbox": [
+                1579,
+                46,
+                64,
+                64
+              ],
+              "children": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -232,3 +232,94 @@ closed-menu items from the counts above.
 
 `parse_tree` therefore needs the screen bounds, which means the `Computer`
 protocol gains `screen_size()`.
+
+---
+
+# Revision 3 — Task 2 capture results, measured 2026-09-21
+
+## D12 — Chrome's web accessibility tree is enabled progressively
+
+A first capture of Chrome returned 172 nodes with zero `AXWebArea` and no page
+content at all: toolbars, tab buttons, and the address bar only. The social media page
+that was open was entirely invisible.
+
+Setting the two attributes normally used to request it returned errors:
+
+```
+AXUIElementSetAttributeValue(app, "AXManualAccessibility", True)   -> -25205
+AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface", True) -> -25208
+```
+
+Despite both failing, the tree populated anyway over the following captures:
+
+| Capture | Nodes | AXWebArea | AXStaticText | AXLink |
+| --- | --- | --- | --- | --- |
+| first | 172 | 0 | 0 | 0 |
+| after set attempts | 179 | 1 | 0 | 0 |
+| after depth raise | 691 | 1 | 51 | 26 |
+
+Chrome appears to enable its renderer accessibility tree when it observes
+sustained AX API use, and then builds it lazily. The practical consequence is
+that **the first capture of a Chrome window is not representative**, and an
+agent's first few steps against Chrome may see a screen with no page content on
+it. `MacComputer` should warm the tree — read it once and discard — before the
+loop's first real observation, and the README must state this.
+
+The supported alternative is launching Chrome with
+`--force-renderer-accessibility`. Safari exposes web content natively and is
+untested here; it is the better first target for a browser task.
+
+## D13 — Depth cap of 14 truncates page content
+
+Page content sits below the depth at which browser chrome ends. Sweeping the cap
+against the same three Chrome windows:
+
+| Depth cap | Nodes | Deepest reached | Labelled | Web-content nodes | Walk |
+| --- | --- | --- | --- | --- | --- |
+| 14 | 182 | 14 | 104 | 4 | 32ms |
+| 20 | 190 | 20 | 104 | 4 | 17ms |
+| 30 | 226 | 28 | 117 | 12 | 19ms |
+| 45 | 226 | 28 | 117 | 12 | 19ms |
+
+The tree fully resolves at 28. `MAX_DEPTH` is therefore 30, not 14, and the
+extra depth costs nothing measurable. SPEC.md's traversal assumed shallow
+application trees; a browser is not one.
+
+## D14 — With page content present, both caps bind
+
+The fully populated Chrome capture, filtered the way the agent filters:
+
+| Measure | Count |
+| --- | --- |
+| Total nodes | 691 |
+| Labelled | 252 |
+| Labelled with a bounding box | 251 |
+| On screen | 251 |
+| Clickable and on screen | 165 |
+
+So `max_elements=150` truncates 251 elements, and `max_candidates=150` truncates
+165 candidates. Revision 2 raised the candidate cap from 80 to 150 based on a
+capture that did not include page content; that measurement was not
+representative, and 150 is still too low for a browser.
+
+This makes the rerank escape hatch described in Task 4 no longer optional for
+browser tasks. One social media page produced 165 candidates; a denser page will
+produce more, and tree-order truncation will silently drop whichever ones happen
+to come last. Resolve before Task 12 ships a browser example: either raise the
+cap toward the 218 demonstrated in the semantic-find cookbook and measure
+quality at that size, or build the two-stage shortlist.
+
+State size is unchanged at roughly 1,200 tokens for 150 elements, so cost is not
+the constraint — selection quality at large option counts is.
+
+## D15 — Captured fixtures must be sanitized before they are committed
+
+SPEC.md §5 M0 says to commit real captured trees. The repository is public, and
+a real capture contains whatever was on screen: in these captures, a social media
+page including a physical address, and desktop filenames.
+
+`scripts/sanitize_tree.py` replaces every label with a generic stand-in while
+preserving role, bounding box, depth, child ordering, and the long-label cases
+that exercise truncation. The parser tests care about structure only, so nothing
+of test value is lost. Raw captures stay local and are gitignored as
+`*_PRIVATE.json`.

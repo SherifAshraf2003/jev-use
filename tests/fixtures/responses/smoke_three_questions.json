@@ -1,0 +1,42 @@
+{
+  "model": "jev-1.13.0",
+  "usage": {
+    "input_tokens": 468,
+    "output_tokens": 94
+  },
+  "answers": {
+    "next_action": {
+      "type": "choice",
+      "choice": "Click the button labelled \"Settings\"",
+      "confidence": 1.0,
+      "probabilities": {
+        "Click the link labelled \"Help\"": 0.0,
+        "Click the button labelled \"Cancel\"": 0.0,
+        "Click the button labelled \"Settings\"": 1.0
+      }
+    },
+    "task_complete": {
+      "type": "noul",
+      "noul": 0.07
+    },
+    "progress": {
+      "type": "score",
+      "score": 0.35,
+      "confidence": 0.71,
+      "legend": {
+        "0": "No progress has been made.",
+        "1": "The relevant area of the application is visible.",
+        "2": "The task is partly done.",
+        "3": "The task is nearly done.",
+        "4": "The task is finished."
+      },
+      "probabilities": {
+        "0": 0.68,
+        "1": 0.31,
+        "2": 0.0,
+        "3": 0.01,
+        "4": 0.0
+      }
+    }
+  }
+}

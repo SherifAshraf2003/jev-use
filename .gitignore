@@ -11,3 +11,6 @@ traces/
 .env.*
 !.env.example
 *.key
+.DS_Store
+*_PRIVATE.json
+*_raw.json
