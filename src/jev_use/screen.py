@@ -28,6 +28,8 @@ LABEL_KEYS = (
 )
 CHILDREN_KEYS = ("children", "child_nodes", "childNodes", "elements", "nodes")
 ENABLED_KEYS = ("enabled", "is_enabled", "IsEnabled", "AXEnabled")
+FOCUSED_KEYS = ("focused", "is_focused", "HasKeyboardFocus", "AXFocused")
+SELECTED_KEYS = ("selected", "is_selected", "IsSelected", "AXSelected")
 BBOX_KEYS = ("bbox", "bounds", "frame", "rect", "BoundingRectangle", "position_size")
 
 ROLE_VOCABULARY = frozenset(
@@ -121,10 +123,24 @@ class Element:
     label: str
     enabled: bool = True
     bbox: tuple[int, int, int, int] | None = None
+    focused: bool = False
+    selected: bool = False
 
     def as_line(self) -> str:
-        """The single line the model reads. Deliberately excludes the bbox as noise."""
-        return f'[{self.index}] {self.role} "{self.label}"'
+        """The single line the model reads.
+
+        The bbox is excluded as noise, but focus and selection are included:
+        without them a screen with twenty-four identically labelled tab buttons
+        gives the model no way to tell which one belongs to the current tab, and
+        it can only guess. See docs/DEVIATIONS.md D22.
+        """
+        marks = []
+        if self.focused:
+            marks.append("focused")
+        if self.selected:
+            marks.append("selected")
+        suffix = f" ({', '.join(marks)})" if marks else ""
+        return f'[{self.index}] {self.role} "{self.label}"{suffix}'
 
     @property
     def center(self) -> tuple[int, int] | None:
@@ -235,6 +251,8 @@ def parse_tree(
                 label=label,
                 enabled=True if enabled is None else bool(enabled),
                 bbox=bbox,
+                focused=bool(_first(node, FOCUSED_KEYS)),
+                selected=bool(_first(node, SELECTED_KEYS)),
             )
         )
         if len(elements) >= max_elements:

@@ -137,3 +137,31 @@ def test_without_bounds_nothing_is_filtered() -> None:
 def test_disabled_state_is_carried_through() -> None:
     tree = {"role": "button", "label": "Pay", "enabled": False, "children": []}
     assert parse_tree(tree)[0].enabled is False
+
+
+def test_focus_and_selection_appear_in_the_line() -> None:
+    """D22: without these, identical tab labels are indistinguishable to the model."""
+    plain = Element(index="e0", role="button", label="Close")
+    assert plain.as_line() == '[e0] button "Close"'
+    focused = Element(index="e1", role="button", label="Close", focused=True)
+    assert focused.as_line() == '[e1] button "Close" (focused)'
+    selected = Element(index="e2", role="tab", label="Tab", selected=True)
+    assert selected.as_line() == '[e2] tab "Tab" (selected)'
+    both = Element(index="e3", role="tab", label="Tab", focused=True, selected=True)
+    assert both.as_line() == '[e3] tab "Tab" (focused, selected)'
+
+
+def test_focus_is_parsed_from_platform_keys() -> None:
+    tree = {
+        "role": "window",
+        "label": "W",
+        "children": [
+            {"role": "button", "label": "A", "AXFocused": True, "children": []},
+            {"role": "tab", "label": "B", "AXSelected": True, "children": []},
+            {"role": "button", "label": "C", "children": []},
+        ],
+    }
+    parsed = {e.label: (e.focused, e.selected) for e in parse_tree(tree)}
+    assert parsed["A"] == (True, False)
+    assert parsed["B"] == (False, True)
+    assert parsed["C"] == (False, False)

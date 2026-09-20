@@ -74,6 +74,8 @@ def _node(element: Any, depth: int = 0) -> dict[str, Any]:
         "label": str(label).strip() if label else "",
         "enabled": True if enabled is None else bool(enabled),
         "bbox": _bbox(element),
+        "focused": _attribute(element, AX.kAXFocusedAttribute) is True,
+        "selected": _attribute(element, "AXSelected") is True,
         "children": [_node(c, depth + 1) for c in children] if depth < MAX_DEPTH else [],
     }
 
