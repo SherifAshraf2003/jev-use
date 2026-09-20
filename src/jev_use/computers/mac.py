@@ -31,6 +31,10 @@ SETTINGS_PATH = "System Settings > Privacy & Security > Accessibility"
 
 KEYCODES = {"Enter": 36, "Return": 36, "Escape": 53, "Tab": 48, "Space": 49}
 
+# Time for the window server to finish raising an application before an event is
+# posted to it. Without a pause the first event can still reach the old front app.
+ACTIVATE_SETTLE_SECONDS = 0.25
+
 
 def _is_trusted() -> bool:
     """Separate function so tests can monkeypatch it."""
@@ -79,6 +83,22 @@ def _windows_for(pid: int) -> list[Any]:
         if windows:
             break
     return windows
+
+
+def _running_app(pid: int) -> Any:
+    return AppKit.NSRunningApplication.runningApplicationWithProcessIdentifier_(pid)
+
+
+def _is_frontmost(pid: int) -> bool:
+    front = AppKit.NSWorkspace.sharedWorkspace().frontmostApplication()
+    return bool(front is not None and int(front.processIdentifier()) == pid)
+
+
+def _activate(pid: int) -> None:
+    app = _running_app(pid)
+    if app is None:
+        return
+    app.activateWithOptions_(AppKit.NSApplicationActivateIgnoringOtherApps)
 
 
 def _attribute(element: Any, name: Any) -> Any:
@@ -152,6 +172,33 @@ class MacComputer:
         self._pid = pid
         self._screen = screen
         self._events = events if events is not None else QuartzEvents()
+        self._activated = False
+
+    async def _ensure_frontmost(self) -> None:
+        """Raise the target application before synthesizing any input.
+
+        Reading and acting use different addressing. The tree is read from one
+        application by pid, but CGEventPost posts to the system: the event goes
+        to whatever is frontmost and to whatever window owns that screen point.
+        If the target is not in front, clicks land on the window above it and
+        keystrokes go to the wrong application entirely — in one live run a URL
+        meant for the browser was typed into the terminal that launched the run.
+        """
+        if self._activated and _is_frontmost(self._pid):
+            return
+        _activate(self._pid)
+        await asyncio.sleep(ACTIVATE_SETTLE_SECONDS)
+        if not _is_frontmost(self._pid):
+            logger.warning(
+                "could not bring pid=%s to the front; input may reach another "
+                "application. Refusing to act.",
+                self._pid,
+            )
+            raise RuntimeError(
+                f"the target application (pid {self._pid}) could not be brought to the "
+                "front, so synthesized input would reach whatever is in front instead"
+            )
+        self._activated = True
 
     @classmethod
     async def attach(cls, app_name: str) -> Self:
@@ -189,18 +236,22 @@ class MacComputer:
         return self._screen
 
     async def click(self, x: int, y: int) -> None:
+        await self._ensure_frontmost()
         self._events.click(x, y)
         await asyncio.sleep(0.05)
 
     async def type_text(self, text: str) -> None:
+        await self._ensure_frontmost()
         self._events.type_text(text)
         await asyncio.sleep(0.05)
 
     async def scroll(self, direction: Literal["up", "down"]) -> None:
+        await self._ensure_frontmost()
         self._events.scroll(SCROLL_LINES if direction == "up" else -SCROLL_LINES)
         await asyncio.sleep(0.05)
 
     async def press(self, key: str) -> None:
+        await self._ensure_frontmost()
         self._events.key(key)
         await asyncio.sleep(0.05)
 

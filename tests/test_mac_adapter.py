@@ -22,7 +22,13 @@ class FakeQuartz:
         self.events.append(("key", name))
 
 
-async def test_protocol_methods_reach_the_event_layer() -> None:
+async def test_protocol_methods_reach_the_event_layer(monkeypatch) -> None:
+    import jev_use.computers.mac as mac
+
+    # Acting now raises the target first; that path has its own tests.
+    monkeypatch.setattr(mac, "_activate", lambda pid: None)
+    monkeypatch.setattr(mac, "_is_frontmost", lambda pid: True)
+    monkeypatch.setattr(mac, "ACTIVATE_SETTLE_SECONDS", 0)
     quartz = FakeQuartz()
     computer = MacComputer(pid=123, screen=(1920, 1080), events=quartz)
     await computer.click(10, 20)
@@ -109,3 +115,47 @@ async def test_real_application_tree_parses() -> None:
     finally:
         await computer.close()
     assert elements, f"{target} returned no elements despite reporting a window"
+
+
+async def test_input_is_refused_when_the_target_cannot_be_raised(monkeypatch) -> None:
+    """A live run typed a URL into the terminal because the browser was never raised."""
+    import jev_use.computers.mac as mac
+
+    monkeypatch.setattr(mac, "_activate", lambda pid: None)
+    monkeypatch.setattr(mac, "_is_frontmost", lambda pid: False)
+    monkeypatch.setattr(mac, "ACTIVATE_SETTLE_SECONDS", 0)
+    quartz = FakeQuartz()
+    computer = MacComputer(pid=999, screen=(1920, 1080), events=quartz)
+    with pytest.raises(RuntimeError, match="could not be brought to the front"):
+        await computer.type_text("amazon.com")
+    assert quartz.events == [], "no input may be synthesized when the target is not in front"
+
+
+async def test_every_input_method_raises_the_target_first(monkeypatch) -> None:
+    import jev_use.computers.mac as mac
+
+    activated: list[int] = []
+    monkeypatch.setattr(mac, "_activate", lambda pid: activated.append(pid))
+    monkeypatch.setattr(mac, "_is_frontmost", lambda pid: bool(activated))
+    monkeypatch.setattr(mac, "ACTIVATE_SETTLE_SECONDS", 0)
+    quartz = FakeQuartz()
+    computer = MacComputer(pid=42, screen=(1920, 1080), events=quartz)
+    await computer.click(1, 2)
+    assert activated == [42]
+    await computer.type_text("x")
+    await computer.scroll("down")
+    await computer.press("Enter")
+    assert len(quartz.events) == 4
+
+
+async def test_reading_the_tree_does_not_steal_focus(monkeypatch) -> None:
+    """Observation must never raise anything; only acting does."""
+    import jev_use.computers.mac as mac
+
+    activated: list[int] = []
+    monkeypatch.setattr(mac, "_activate", lambda pid: activated.append(pid))
+    monkeypatch.setattr(mac, "_windows_for", lambda pid: [])
+    computer = MacComputer(pid=7, screen=(1920, 1080), events=FakeQuartz())
+    await computer.tree()
+    await computer.screen_size()
+    assert activated == []
