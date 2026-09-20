@@ -9,4 +9,5 @@ dist/
 traces/
 .env
 .env.*
+!.env.example
 *.key
