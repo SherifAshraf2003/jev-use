@@ -37,6 +37,12 @@ class Brain(Protocol):
 
 
 class SupervisorLike(Protocol):
+    @property
+    def total_input_tokens(self) -> int: ...
+
+    @property
+    def cost_usd(self) -> float: ...
+
     async def review(self, goal: str, rules: list[str], elements: Any, action: Any) -> Any: ...
 
 
@@ -100,6 +106,8 @@ async def run(
                 ),
             )
 
+            supervisor_tokens = 0
+            supervisor_latency = 0.0
             if supervisor is not None and decision.action is not None:
                 report = await supervisor.review(goal, rules, elements, decision.action)
                 calls += 1
@@ -110,6 +118,8 @@ async def run(
                 judgments.irreversible = report.irreversible
                 judgments.blocker = report.blocker
                 judgments.blocker_confidence = report.blocker_confidence
+                supervisor_tokens = report.input_tokens
+                supervisor_latency = report.latency_ms
 
             verdict, reason = decide(judgments, history, thresholds)
 
@@ -128,7 +138,9 @@ async def run(
                     irreversible=judgments.irreversible,
                     blocker=judgments.blocker,
                     input_tokens=decision.input_tokens,
+                    supervisor_input_tokens=supervisor_tokens,
                     latency_ms=decision.latency_ms,
+                    supervisor_latency_ms=supervisor_latency,
                     elements=len(elements),
                     candidates=len(actions),
                     runners_up=top_n(decision.probabilities, 5),
@@ -156,14 +168,18 @@ async def run(
             verdict, reason = Verdict.ABORT, f"reached the step limit of {max_steps}"
     finally:
         mean_latency = (sum(latencies) / len(latencies)) if latencies else 0.0
+        total_tokens = brain.total_input_tokens + (
+            supervisor.total_input_tokens if supervisor is not None else 0
+        )
+        total_cost = brain.cost_usd + (supervisor.cost_usd if supervisor is not None else 0.0)
         if writer is not None:
             writer.write_summary(
                 verdict=str(verdict),
                 reason=reason,
                 steps=history.step,
                 calls=calls,
-                input_tokens=brain.total_input_tokens,
-                cost_usd=brain.cost_usd,
+                input_tokens=total_tokens,
+                cost_usd=total_cost,
                 mean_latency_ms=mean_latency,
             )
             writer.close()
@@ -172,8 +188,8 @@ async def run(
         verdict=verdict,
         steps=history.step,
         calls=calls,
-        input_tokens=brain.total_input_tokens,
-        cost_usd=brain.cost_usd,
+        input_tokens=total_tokens,
+        cost_usd=total_cost,
         mean_latency_ms=mean_latency,
         reason=reason,
         trace_path=Path(trace_path) if trace_path is not None else None,

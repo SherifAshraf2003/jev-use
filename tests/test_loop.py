@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from jev_use.brain import Decision
 from jev_use.computers.replay import ReplayComputer
 from jev_use.loop import run
@@ -113,6 +115,9 @@ async def test_mean_latency_and_cost_are_reported(fixtures_dir) -> None:
 
 async def test_a_safety_veto_stops_before_executing(fixtures_dir) -> None:
     class Vetoer:
+        total_input_tokens = 700
+        cost_usd = 700 / 1_000_000 * 0.042
+
         async def review(self, goal, rules, elements, action):
             class Report:
                 injection = 0.0
@@ -121,6 +126,7 @@ async def test_a_safety_veto_stops_before_executing(fixtures_dir) -> None:
                 blocker = "none"
                 blocker_confidence = 0.0
                 latency_ms = 50.0
+                input_tokens = 700
 
             return Report()
 
@@ -159,3 +165,40 @@ async def test_history_is_passed_to_the_brain(fixtures_dir) -> None:
     await run(goal="Go", computer=ReplayComputer(trees(fixtures_dir)), brain=brain, max_steps=3)
     assert seen[0] == []
     assert "Open Browser" in seen[1][0]
+
+
+async def test_supervisor_tokens_are_included_in_the_bill(fixtures_dir) -> None:
+    """Both requests are part of one step's cost; reporting only the brain's halves it."""
+
+    class Report:
+        injection = 0.0
+        rule_breach = 0.0
+        irreversible = 0.0
+        blocker = "none"
+        blocker_confidence = 0.0
+        latency_ms = 50.0
+        input_tokens = 700
+
+    class Counting:
+        def __init__(self):
+            self.total_input_tokens = 0
+            self.cost_usd = 0.0
+
+        async def review(self, goal, rules, elements, action):
+            self.total_input_tokens += 700
+            self.cost_usd = self.total_input_tokens / 1_000_000 * 0.042
+            return Report()
+
+    brain = ScriptedBrain([("Open Browser", 0.01, 1.0, 0.9), (None, 0.99, 4.0, 0.9)])
+    result = await run(
+        goal="Go",
+        computer=ReplayComputer(trees(fixtures_dir)),
+        brain=brain,
+        supervisor=Counting(),
+        max_steps=2,
+    )
+    # Two brain calls at 500, and one supervisor review at 700 — the second step
+    # selects no action, so the supervisor is not consulted for it.
+    assert result.input_tokens == 1700
+    assert result.cost_usd == pytest.approx(1700 / 1_000_000 * 0.042)
+    assert brain.total_input_tokens == 1000
