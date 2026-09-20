@@ -429,3 +429,74 @@ typing actions are included.
 
 SPEC.md §4.2 required `describe()` to be self-contained but did not anticipate
 that self-contained is not the same as unique.
+
+---
+
+# Revision 5 — first end-to-end decisions, measured 2026-09-21
+
+## D20 — Latency scales with total tokens, correcting D17
+
+D17 reported latency as flat at ~350ms and attributed an earlier 2–5 second
+reading to noise. That conclusion was drawn from sweeping the **option count**
+while the state stayed small. Sweeping the whole payload tells a different
+story. Seven runs per row, same goal, real capture:
+
+| Elements | Candidates | Input tokens | p50 | p90 | min | max |
+| --- | --- | --- | --- | --- | --- | --- |
+| 40 | 28 | 1,762 | 345ms | 807ms | 304ms | 807ms |
+| 100 | 51 | 3,038 | 365ms | 436ms | 337ms | 436ms |
+| 250 | 161 | 8,380 | 1,041ms | 2,152ms | 625ms | 2,152ms |
+
+So the flat region is real but it ends. Up to roughly 3k tokens a request
+returns in about 350ms; at 8.4k tokens the median triples and the tail reaches
+2.2 seconds. D17's option-count conclusion stands — options are cheap — but the
+claim that latency does not grow was too broad.
+
+**This bears directly on SPEC.md §1**, which cites "roughly 70–500ms" for a
+System One request. That holds for small states. At the 250-element cap this
+project ships, a step costs about 1 second, and about 2 seconds with the
+supervisor's second request. The cost claim survives; the latency claim needs
+the state size stated next to it, and `docs/BENCHMARK.md` must report it that
+way rather than quoting the docs figure.
+
+There is a real tradeoff here that calibration should settle: 100 elements
+answers in 365ms, 250 elements in 1,041ms. Almost 3x latency for elements that
+are, on the measured page, mostly not the target.
+
+## D21 — Cost per decision is 5x the earlier estimate, and still negligible
+
+Measured across four goals on the full 250-element state: 9,151 input tokens per
+decision, $0.000384 each. The earlier D14 estimate of $0.00008 counted only the
+`screen_elements` lines and omitted the candidate descriptions, which are longer
+than the element lines because they carry the action verb and, where labels
+collide, an ordinal clause.
+
+A 25-step task therefore costs roughly $0.01 with the supervisor on. Cost is
+still not the constraint.
+
+## D22 — Ordinals are selected by the model, but cannot express recency
+
+First end-to-end decisions against the real capture, 250 elements and 190
+candidates:
+
+| Goal | Selected | Confidence |
+| --- | --- | --- |
+| Open the Marketplace section | `Click the link labelled "Marketplace"` | 0.990 |
+| Send a message to this page | `Click the button labelled "Message"` | 0.970 |
+| Close the current browser tab | `Click the 5th of 24 button labelled "Close"` | 0.580 |
+| Search for something on this page | `Click the combobox labelled "Search Facebook"` | 0.380 |
+
+The disambiguation from D19 works end to end: the model selects ordinal-tagged
+options and resolves them to distinct elements.
+
+The third row exposes a limit the ordinal cannot fix. Twenty-four tabs each
+carry a "Close" button, and nothing in the state says which tab is *current*.
+The model picked the 5th with 0.58 confidence and the 1st as runner-up at 0.21;
+neither is knowably right, because the information is not in the state. The
+spread is the honest signal here — that is what low confidence is supposed to
+look like, and `min_confidence` of 0.35 would let this act anyway.
+
+Fixing it means putting the missing fact into the state, for example a focused
+or selected flag per element, rather than asking the model to guess. That is an
+`AXFocused` / `AXSelected` attribute read in `mac.py` and a field on `Element`.
+Logged for Task 12; not built yet.
