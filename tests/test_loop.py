@@ -217,3 +217,42 @@ async def test_an_empty_screen_aborts_without_spending_a_model_call() -> None:
     assert "no readable elements" in result.reason
     assert result.calls == 0
     assert result.input_tokens == 0
+
+
+async def test_missing_inputs_warn_when_the_screen_has_fields(caplog) -> None:
+    """A live run failed for eight steps because no goal needing text was reachable."""
+    import logging
+
+    tree = {
+        "role": "window",
+        "label": "Browser",
+        "bbox": [0, 0, 1920, 1080],
+        "children": [
+            {"role": "textfield", "label": "Address and search bar", "bbox": [0, 0, 300, 20]}
+        ],
+    }
+    brain = ScriptedBrain([(None, 0.99, 4.0, 0.9)])
+    with caplog.at_level(logging.WARNING, logger="jev_use.loop"):
+        await run(goal="Go to a website", computer=ReplayComputer([tree]), brain=brain, max_steps=1)
+    assert any("no --input supplied" in r.message for r in caplog.records)
+
+
+async def test_no_warning_when_inputs_are_supplied(caplog) -> None:
+    import logging
+
+    tree = {
+        "role": "window",
+        "label": "Browser",
+        "bbox": [0, 0, 1920, 1080],
+        "children": [{"role": "textfield", "label": "Search", "bbox": [0, 0, 300, 20]}],
+    }
+    brain = ScriptedBrain([(None, 0.99, 4.0, 0.9)])
+    with caplog.at_level(logging.WARNING, logger="jev_use.loop"):
+        await run(
+            goal="Search",
+            computer=ReplayComputer([tree]),
+            brain=brain,
+            inputs={"q": "x"},
+            max_steps=1,
+        )
+    assert not any("no --input supplied" in r.message for r in caplog.records)

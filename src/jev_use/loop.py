@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
-from jev_use.actions import enumerate_actions
+from jev_use.actions import EDITABLE_ROLES, enumerate_actions
 from jev_use.brain import Decision
 from jev_use.computers.base import Computer, execute_action
 from jev_use.policy import History, Judgments, Thresholds, Verdict, decide
@@ -102,6 +102,17 @@ async def run(
                 logger.error("%s", reason)
                 break
             actions = enumerate_actions(elements, inputs, banned)
+            if step == 1 and not inputs:
+                editable = [e for e in elements if e.role in EDITABLE_ROLES]
+                if editable:
+                    logger.warning(
+                        "no --input supplied but the screen has %d editable field(s), "
+                        "including %r. The model selects from enumerated actions and "
+                        "cannot compose text, so there are no typing actions at all and "
+                        "any goal needing text entry is unreachable.",
+                        len(editable),
+                        editable[0].label[:40],
+                    )
             decision = await brain.decide(goal, rules, elements, actions, history_lines)
             calls += 1
             if decision.latency_ms:
