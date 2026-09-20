@@ -80,11 +80,32 @@ def test_unmapped_key_raises_rather_than_guessing_a_keycode() -> None:
 
 @pytest.mark.live
 async def test_real_application_tree_parses() -> None:
+    """Attach to whichever application actually has a usable window right now.
+
+    Hardcoding one application made this depend on machine state: it passed
+    while Finder had a desktop window and failed once that window went stale.
+    """
+    import AppKit
+
+    from jev_use.computers.mac import _is_trusted, _windows_for
     from jev_use.screen import parse_tree
 
-    computer = await MacComputer.attach("Finder")
+    if not _is_trusted():
+        pytest.skip("this process is not trusted for Accessibility")
+
+    target = None
+    for app in AppKit.NSWorkspace.sharedWorkspace().runningApplications():
+        if app.activationPolicy() != 0:
+            continue
+        if _windows_for(int(app.processIdentifier())):
+            target = app.localizedName()
+            break
+    if target is None:
+        pytest.skip("no running application currently has a usable window")
+
+    computer = await MacComputer.attach(target)
     try:
         elements = parse_tree(await computer.tree(), screen_bounds=await computer.screen_size())
     finally:
         await computer.close()
-    assert elements, "Finder returned no elements; is Accessibility permission granted?"
+    assert elements, f"{target} returned no elements despite reporting a window"
