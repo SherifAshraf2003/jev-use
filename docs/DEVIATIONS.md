@@ -129,3 +129,106 @@ and must be filled in before the milestones that depend on them.
 - The practical ceiling on Choice options before quality degrades (SPEC.md §11.2).
 - Whether two-phase supervision costs measurably more latency than speculative
   supervision (SPEC.md §11.3).
+
+---
+
+# Revision 2 — native macOS, measured 2026-09-21
+
+The project now reads the macOS Accessibility API directly. Cua is no longer the
+primary adapter. Everything below was measured on this machine, not assumed.
+
+## D7 — The macOS Accessibility API is callable directly
+
+`pyobjc-framework-ApplicationServices` exposes the whole surface this project
+needs, verified present:
+
+```
+AXUIElementCreateSystemWide, AXUIElementCreateApplication,
+AXUIElementCopyAttributeValue, AXUIElementCopyAttributeNames,
+AXUIElementPerformAction, AXIsProcessTrusted, AXValueGetValue,
+kAXChildrenAttribute, kAXRoleAttribute, kAXTitleAttribute,
+kAXPositionAttribute, kAXSizeAttribute
+```
+
+Input synthesis comes from `pyobjc-framework-Quartz`: `CGEventCreateMouseEvent`,
+`CGEventCreateKeyboardEvent`, `CGEventPost`. Screen bounds come from
+`CGDisplayBounds(CGMainDisplayID())`.
+
+This removes the Cua dependency, the VM, and the unverified tree shape that was
+blocking the original Task 3. It replaces them with one requirement: the host
+process needs Accessibility permission.
+
+## D8 — Permission attaches to the host process, not the script
+
+`AXIsProcessTrusted()` reports whether the **running binary** is trusted. A
+Python script inherits the grant of whatever launched it — on this machine,
+`Ghostty.app`. Granting Ghostty made every child process trusted; running the
+same script from a different terminal or editor would report `False` again and
+return empty trees with no error raised.
+
+Consequences for the implementation:
+
+- `MacComputer` must call `AXIsProcessTrusted()` at startup and fail loudly with
+  the System Settings path, rather than returning an empty element list.
+- The README must state that the grant is per-host-application.
+- Shipping this to other people eventually needs a signed `.app` bundle so the
+  grant attaches to a stable identity. Out of scope for v0.1.
+
+## D9 — Language choice: measured, Swift advantage is ~1.16x
+
+Identical traversal (five attributes plus children per node, depth cap 12,
+median of three runs, same target pid), Python + pyobjc against compiled Swift:
+
+| Target | Python | Swift | Ratio |
+| --- | --- | --- | --- |
+| Music (menu tree, 320 nodes) | 37.6ms | 31.5ms | 1.19x |
+| Slack (menu tree, 283 nodes) | 33.2ms | 28.7ms | 1.16x |
+
+Per attribute read: ~19.6µs Python, ~16.4µs Swift. The pyobjc bridge is only
+~3µs of that. The remaining ~16µs is the AX API performing a cross-process call
+into the target application, which costs the same from any language.
+
+Set against a 200–500ms System One request, a full tree walk is roughly 10% of
+step time, so the language difference is about 1.6% per step. **Python is the
+decision.** The structural argument for Swift — permission attaching to a signed
+binary identity — survives the measurement but only matters at distribution time.
+
+## D10 — Real element counts, and a correction
+
+An earlier measurement in this session reported ~320 nodes and ~230 clickable
+elements for Music and Slack. That was wrong: both applications had zero open
+windows, so the walk traversed their menu bar trees. `AXUIElementCopyAttributeValue`
+with `kAXWindowsAttribute` returned an empty list for both.
+
+Walking actual windows instead (depth cap 14, five runs, median):
+
+| Application | Windows | Nodes | Labelled and on screen | Clickable | Walk |
+| --- | --- | --- | --- | --- | --- |
+| Finder | 1 | 20 | 20 | 0 | 2.3ms |
+| Google Chrome | 3 | 166 | 98 | 90 | 23.3ms |
+
+What this means for the caps in SPEC.md §4.1 and §4.2:
+
+- `max_elements=150` is not binding on these applications.
+- `max_candidates=80` is exceeded by Chrome's 90 clickable elements, so
+  truncation is real but marginal. Raising it to 150 covers both, and the
+  semantic-find cookbook scores 218 options in a single Choice, so 150 is within
+  demonstrated range. SPEC.md §11.2 still asks for an empirical ceiling.
+- State size at 150 elements is roughly 1,000 tokens, which is about $0.00005
+  per decision at $0.042 per million input tokens.
+
+Two caveats on these numbers. Chrome builds its accessibility tree lazily, so
+166 nodes is likely browser chrome rather than page content; a content-heavy
+page is untested and may be far larger. Finder's 20 nodes is low enough to
+suggest lazily populated children that this traversal did not reach.
+
+## D11 — Offscreen elements can be filtered correctly, not heuristically
+
+Elements carry a position and size in screen coordinates. An element whose
+rectangle has zero area, or lies entirely outside `CGDisplayBounds`, cannot be
+clicked — the synthesized event would land somewhere else. Dropping these is a
+correctness filter rather than a relevance guess, and it is what removed the
+closed-menu items from the counts above.
+
+`parse_tree` therefore needs the screen bounds, which means the `Computer`
+protocol gains `screen_size()`.

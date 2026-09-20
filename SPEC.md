@@ -1,4 +1,4 @@
-# SPEC.md — jev-agent
+# SPEC.md — jev-use
 
 An open-source computer-use agent whose decision layer is a System One model
 (TypeSafe's Jev) instead of a frontier LLM. Code enumerates the legal actions
@@ -109,14 +109,14 @@ real task complete with per-step cost and latency printed at the end.
 ## 3. Repository layout
 
 ```
-jev-agent/
+jev-use/
   README.md                 # what it is, 60-second quickstart, honest limits
   SPEC.md                   # this file
   LICENSE                   # MIT
   NOTICE                    # trademark disclaimer, see §10
   CONTRIBUTING.md
   pyproject.toml            # uv/hatch, Python >=3.11
-  src/jev_agent/
+  src/jev_use/
     __init__.py
     screen.py               # Element, parse_tree
     actions.py              # Action, enumerate_actions
@@ -128,7 +128,7 @@ jev-agent/
       base.py               # Computer protocol
       cua.py                # Cua adapter (sandbox + driver)
       replay.py             # fixture-driven fake, for tests and demo
-    trace.py                # JSONL logging + a `jev-agent replay` viewer
+    trace.py                # JSONL logging + a `jev-use replay` viewer
     cli.py                  # typer/argparse entry point
   tests/
     fixtures/trees/*.json   # real captured accessibility trees
@@ -338,7 +338,7 @@ property test shows banned signatures never appear in the candidate list.
 
 ### M2 — One decision
 
-- `brain.py` and a `jev-agent decide --tree fixture.json --goal "..."` command
+- `brain.py` and a `jev-use decide --tree fixture.json --goal "..."` command
   that prints the ranked candidates with probabilities.
 
 **Acceptance:** running it against a fixture prints a sensible ranking; token
@@ -348,7 +348,7 @@ count and latency reported; works with `--offline` using a stored response.
 
 - `loop.py`, `policy.py`, `trace.py`, `computers/replay.py`.
 
-**Acceptance:** `jev-agent demo` completes a scripted 4-screen task offline
+**Acceptance:** `jev-use demo` completes a scripted 4-screen task offline
 with zero network calls; trace file contains one record per step including the
 top-5 runners-up with probabilities.
 
@@ -372,7 +372,7 @@ steps, calls, tokens, cost, mean latency.
 - README, CALIBRATION.md, CONTRIBUTING.md, MIT LICENSE, NOTICE, CI, PyPI
   metadata, a recorded terminal demo (asciinema or a GIF).
 
-**Acceptance:** a clean clone on a fresh machine reaches `jev-agent demo`
+**Acceptance:** a clean clone on a fresh machine reaches `jev-use demo`
 working in under five minutes following only the README.
 
 ---
@@ -380,11 +380,11 @@ working in under five minutes following only the README.
 ## 6. CLI
 
 ```
-jev-agent demo                          # offline, no keys
-jev-agent decide --tree FILE --goal STR # one step, prints ranked candidates
-jev-agent run --goal STR --input k=v    # full loop on a Cua sandbox
+jev-use demo                          # offline, no keys
+jev-use decide --tree FILE --goal STR # one step, prints ranked candidates
+jev-use run --goal STR --input k=v    # full loop on a Cua sandbox
                 [--max-steps N] [--no-supervisor] [--trace PATH] [--dry-run]
-jev-agent replay TRACE                  # pretty-print a saved trajectory
+jev-use replay TRACE                  # pretty-print a saved trajectory
 ```
 
 `--dry-run` executes nothing and prints what it would do. It must be the
@@ -402,7 +402,7 @@ default suggestion in the README for a first real run.
   mechanism breaks a deliberate infinite loop within `repeat_limit + 1` steps.
 - **No live API in CI.** A `@pytest.mark.live` marker for opt-in real tests,
   skipped by default and excluded from the CI workflow.
-- Coverage target 80% on `src/jev_agent/` excluding adapters.
+- Coverage target 80% on `src/jev_use/` excluding adapters.
 
 ---
 
@@ -428,7 +428,7 @@ versions. Do not publish a cost win without its accuracy cost next to it.
 
 - Python ≥3.11, `asyncio` throughout, no threads.
 - Zero required dependencies beyond `typesafe-sdk` and `httpx`; Cua is an
-  optional extra (`pip install jev-agent[cua]`).
+  optional extra (`pip install jev-use[cua]`).
 - Type-annotated, `mypy --strict` on `src/`, `ruff` for lint and format.
 - Structured logging via `logging`, never bare `print` outside the CLI.
 - Every model-facing string (instructions, criteria, level descriptions) lives
