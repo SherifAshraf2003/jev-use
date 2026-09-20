@@ -400,3 +400,32 @@ trip (~700ms per step instead of ~350ms, since latency is flat):
 Score shortlisting is preferred for the same round-trip budget. Neither is built
 in v0.1; `enumerate_actions` truncates at 250 and the loop must log when it does,
 so the condition is visible rather than silent.
+
+## D19 — Descriptions collide, and a collision silently drops candidates
+
+`Choice.criteria` is a dict keyed by the option description, and `brain.py` maps
+the returned string back to its `Action` through that same key. Two identical
+descriptions therefore collapse to one option, and the answer can resolve to the
+wrong element.
+
+This is not an edge case. The captured browser window held 166 clickable
+elements but only **91 distinct role-and-label pairs**: 24 separate buttons
+labelled "Close", four comboboxes labelled "Tab Search", and so on. Undisambiguated,
+**75 of 166 candidates — 45% — would vanish from the option list**, including
+23 of the 24 close buttons, with nothing in the trace to show it happened.
+
+`enumerate_actions` therefore appends an ordinal to colliding descriptions only:
+
+```
+Click the button labelled "Message"                             (unique, untouched)
+Click the 24th of 24 button labelled "Close", in screen order   (collided)
+```
+
+Ordinals are assigned in tree order, which is the same order the elements appear
+in the `screen_elements` state field, so "in screen order" is something the model
+can actually resolve against what it was shown. Verified on the real capture:
+161 candidates, 96 requiring an ordinal, 190 descriptions all distinct once
+typing actions are included.
+
+SPEC.md §4.2 required `describe()` to be self-contained but did not anticipate
+that self-contained is not the same as unique.
