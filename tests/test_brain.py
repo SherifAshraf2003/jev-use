@@ -64,8 +64,7 @@ def test_questions_are_keyed_by_description() -> None:
 def test_questions_never_exceed_the_api_ceiling() -> None:
     brain = JevBrain(FakeClient(None))
     many = [
-        Element(index=f"e{i}", role="button", label=f"b{i}", bbox=(0, 0, 4, 4))
-        for i in range(1000)
+        Element(index=f"e{i}", role="button", label=f"b{i}", bbox=(0, 0, 4, 4)) for i in range(1000)
     ]
     questions = brain.build_questions(enumerate_actions(many, {}, set()))
     assert len(questions["next_action"].criteria) <= 255
