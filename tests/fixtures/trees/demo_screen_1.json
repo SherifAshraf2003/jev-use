@@ -1,0 +1,4 @@
+{"role": "window", "label": "Desktop", "bbox": [0, 0, 1920, 1080], "children": [
+  {"role": "button", "label": "Open Browser", "bbox": [10, 10, 140, 30], "children": []},
+  {"role": "button", "label": "Open Mail", "bbox": [10, 50, 140, 30], "children": []}
+]}

@@ -1,0 +1,5 @@
+{"role": "window", "label": "City Library", "bbox": [0, 0, 1920, 1080], "children": [
+  {"role": "heading", "label": "Opening hours", "bbox": [10, 10, 400, 30], "children": []},
+  {"role": "text", "label": "Monday to Friday, 9am to 6pm", "bbox": [10, 50, 500, 20], "children": []},
+  {"role": "text", "label": "Saturday, 10am to 4pm", "bbox": [10, 80, 500, 20], "children": []}
+]}

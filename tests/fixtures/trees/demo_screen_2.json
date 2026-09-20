@@ -1,0 +1,5 @@
+{"role": "window", "label": "Browser", "bbox": [0, 0, 1920, 1080], "children": [
+  {"role": "textfield", "label": "Search", "bbox": [10, 10, 400, 30], "children": []},
+  {"role": "button", "label": "Go", "bbox": [420, 10, 60, 30], "children": []},
+  {"role": "link", "label": "Bookmarks", "bbox": [10, 50, 120, 20], "children": []}
+]}

@@ -1,0 +1,5 @@
+{"role": "window", "label": "Results", "bbox": [0, 0, 1920, 1080], "children": [
+  {"role": "link", "label": "Opening hours - City Library", "bbox": [10, 40, 420, 20], "children": []},
+  {"role": "link", "label": "Directions - City Library", "bbox": [10, 70, 420, 20], "children": []},
+  {"role": "link", "label": "City Library - Wikipedia", "bbox": [10, 100, 420, 20], "children": []}
+]}
