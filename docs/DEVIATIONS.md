@@ -323,3 +323,80 @@ preserving role, bounding box, depth, child ordering, and the long-label cases
 that exercise truncation. The parser tests care about structure only, so nothing
 of test value is lost. Raw captures stay local and are gitignored as
 `*_PRIVATE.json`.
+
+---
+
+# Revision 4 — the candidate cap is an API limit, measured 2026-09-21
+
+## D16 — A Choice question accepts at most 255 options
+
+This closes SPEC.md §11.2, which asked for the practical ceiling on Choice
+options before quality degrades. There is no quality cliff to find, because the
+API refuses the request first:
+
+```
+POST https://api.typesafe.ai/v1/systemone: 400 Too many choices.
+Must have at most 255 choices.
+```
+
+Binary searched between 250 and 400: 255 accepted, 256 rejected. The limit is
+exact and is not documented on the models page.
+
+## D17 — No accuracy or latency degradation up to the limit
+
+Measured against the real Chrome capture, one unambiguous goal
+("Send a message to this page"), correct option placed last in every list so
+that tree-order truncation would be maximally punishing, three runs per size:
+
+| Options | Median latency | Confidence | Correct | Input tokens |
+| --- | --- | --- | --- | --- |
+| 25 | 351ms | 0.970 | 3/3 | 991 |
+| 50 | 324ms | 0.990 | 3/3 | 1,743 |
+| 100 | 382ms | 0.860 | 3/3 | 3,114 |
+| 166 | 346ms | 0.880 | 3/3 | 4,157 |
+| 210 | 371ms | 0.470 | 1/3 | 5,301 |
+| 255 | 364ms | 0.720 | 3/3 | 6,471 |
+
+An earlier sweep across three goals at 20, 50, 100 and 166 options was 12/12
+correct with confidence unchanged by list size.
+
+Two readings of this table:
+
+- **Latency is flat.** It does not grow with option count. An earlier run in
+  this session appeared to show 2–5 second responses at 250 options; resampling
+  showed that was noise, not a size effect.
+- **The 210 row is not a degradation.** Resampled with eight runs at the same
+  size and option set: 8/8 correct. The 1/3 does not reproduce. It does show
+  that the same request can return different answers across calls, which is
+  worth remembering when reading any single trace.
+
+Falling confidence as the list grows is expected and is not a quality signal:
+a Choice distribution is normalized across the options given, so the same
+correct answer necessarily holds less probability mass in a larger field. See
+the note in `policy.py` about confidence measuring concentration.
+
+## D18 — `max_candidates` is 250, and sharding is required above it
+
+250 element actions plus the five fallbacks fits under the 255 ceiling. The
+Chrome capture produced 166 clickable elements, so an ordinary page has
+headroom today.
+
+A denser page will not. Above 255 candidates the request is **rejected**, not
+degraded, so this is a hard correctness boundary rather than a tuning choice,
+and v0.1 must handle it. Two designs, both costing a second sequential round
+trip (~700ms per step instead of ~350ms, since latency is flat):
+
+- **Choice bracket.** Shard the candidates, run the shards in parallel, then a
+  final Choice over the shard winners. Sound, because the final round makes the
+  winners commensurable again — necessary since Choice probabilities are
+  normalized within their own option set and cannot be compared across shards.
+  Its weakness is that elimination is unrecoverable: if the correct action loses
+  inside its shard, the final round can never see it.
+- **Score shortlist.** Score every candidate for relevance, take the top N by
+  raw score, then one Choice over the shortlist. A Score is absolute rather than
+  normalized within a batch, so scores merge across shards without a
+  reconciliation round. This is the pattern TypeSafe's rerank cookbook uses.
+
+Score shortlisting is preferred for the same round-trip budget. Neither is built
+in v0.1; `enumerate_actions` truncates at 250 and the loop must log when it does,
+so the condition is visible rather than silent.
