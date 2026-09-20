@@ -20,6 +20,8 @@ from jev_use.policy import Thresholds
 from jev_use.screen import parse_tree
 from jev_use.trace import format_trace, read_trace, top_n
 
+logger = logging.getLogger(__name__)
+
 FIXTURES = Path(__file__).resolve().parent.parent.parent / "tests/fixtures"
 DEMO_SCREENS = [FIXTURES / "trees" / f"demo_screen_{i}.json" for i in range(1, 5)]
 DEMO_SCRIPT: list[tuple[str | None, float, float, float]] = [
@@ -67,6 +69,31 @@ class OfflineBrain:
             input_tokens=480,
             model="offline",
         )
+
+
+def load_dotenv(start: Path | None = None) -> Path | None:
+    """Read KEY=VALUE lines from the nearest .env, walking up from `start`.
+
+    Only fills variables that are not already set, so a real environment
+    variable always wins. Written by hand rather than taking a dependency,
+    since SPEC.md section 9 caps the runtime dependencies.
+    """
+    here = (start or Path.cwd()).resolve()
+    for directory in [here, *here.parents]:
+        candidate = directory / ".env"
+        if not candidate.is_file():
+            continue
+        for raw in candidate.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip().removeprefix("export ").strip()
+            value = value.strip().strip("\"'")
+            if key and key not in os.environ:
+                os.environ[key] = value
+        return candidate
+    return None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -179,7 +206,13 @@ def _cmd_decide(args: argparse.Namespace) -> int:
 def _cmd_run(args: argparse.Namespace) -> int:
     key = os.environ.get("TYPESAFE_API_KEY")
     if not key:
-        print("TYPESAFE_API_KEY is not set", file=sys.stderr)
+        print(
+            "TYPESAFE_API_KEY is not set.\n"
+            "Put it in a .env file in the project root as TYPESAFE_API_KEY=... "
+            "(this command reads the nearest .env automatically), or export it "
+            "in your shell.",
+            file=sys.stderr,
+        )
         return 2
     try:
         inputs = _parse_inputs(args.input)
@@ -231,6 +264,9 @@ def _cmd_replay(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.WARNING)
+    loaded = load_dotenv()
+    if loaded is not None:
+        logger.debug("loaded environment from %s", loaded)
     handlers = {
         "demo": _cmd_demo,
         "decide": _cmd_decide,
