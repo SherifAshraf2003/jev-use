@@ -20,8 +20,11 @@ TERMINAL_VERDICTS = frozenset({Verdict.DONE, Verdict.ASK_HUMAN, Verdict.ABORT})
 
 
 class Brain(Protocol):
-    total_input_tokens: int
-    cost_usd: float
+    @property
+    def total_input_tokens(self) -> int: ...
+
+    @property
+    def cost_usd(self) -> float: ...
 
     async def decide(
         self,

@@ -1,0 +1,5 @@
+{"role": "window", "label": "Checkout", "bbox": [0, 0, 1920, 1080], "children": [
+  {"role": "text", "label": "Total: $84.00", "bbox": [10, 10, 200, 20], "children": []},
+  {"role": "button", "label": "Place order", "bbox": [10, 40, 140, 30], "children": []},
+  {"role": "link", "label": "Back to cart", "bbox": [170, 40, 120, 20], "children": []}
+]}

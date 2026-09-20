@@ -44,3 +44,9 @@ files = ["src"]
 
 [tool.coverage.run]
 omit = ["src/jev_use/computers/mac.py", "src/jev_use/computers/cua.py"]
+
+[[tool.mypy.overrides]]
+# pyobjc ships no type stubs or py.typed marker. Narrowly scoped to those three
+# modules so the rest of the codebase stays strict.
+module = ["AppKit", "ApplicationServices", "Quartz"]
+ignore_missing_imports = true

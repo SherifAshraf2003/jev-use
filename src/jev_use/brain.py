@@ -28,9 +28,14 @@ DEFAULT_MODEL = "jev-latest"
 
 
 class SystemOneClient(Protocol):
-    """The slice of AsyncTypeSafeClient this module uses."""
+    """The slice of AsyncTypeSafeClient this module uses.
 
-    async def system_one(self, state: Any, questions: Any, **kwargs: Any) -> Any: ...
+    Declared as exactly the call this package makes. A `**kwargs: Any` version
+    looks more permissive but is not a supertype of the SDK's keyword-only
+    signature, so the real client would fail the structural check.
+    """
+
+    async def system_one(self, state: Any, questions: Any, *, model: str | None = ...) -> Any: ...
 
 
 @dataclass
