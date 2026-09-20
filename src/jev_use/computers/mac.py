@@ -48,9 +48,37 @@ def find_pid(app_name: str) -> int:
     raise LookupError(f"no running application matching {app_name!r}")
 
 
+WINDOW_ATTRS = (AX.kAXWindowsAttribute, "AXFocusedWindow", "AXMainWindow")
+
+
 def _windows_for(pid: int) -> list[Any]:
+    """Every window of an application, by whichever attribute actually answers.
+
+    `AXWindows` is the documented way and is what most applications answer. Chrome
+    returns an empty list from it while `AXFocusedWindow` and `AXMainWindow` both
+    resolve to a full window tree — the same lazy-accessibility behaviour as D12.
+    Asking only `AXWindows` made a visibly open browser look like it had none.
+    """
     app = AX.AXUIElementCreateApplication(pid)
-    return list(_attribute(app, AX.kAXWindowsAttribute) or [])
+    windows: list[Any] = []
+    seen: set[int] = set()
+    for name in WINDOW_ATTRS:
+        value = _attribute(app, name)
+        if value is None:
+            continue
+        candidates = list(value) if isinstance(value, (list, tuple)) else [value]
+        for window in candidates:
+            # A window with no role is the placeholder Chrome hands back from
+            # AXWindows; it has no children and is not worth walking.
+            if _attribute(window, AX.kAXRoleAttribute) is None:
+                continue
+            if id(window) in seen:
+                continue
+            seen.add(id(window))
+            windows.append(window)
+        if windows:
+            break
+    return windows
 
 
 def _attribute(element: Any, name: Any) -> Any:
