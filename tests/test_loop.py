@@ -202,3 +202,18 @@ async def test_supervisor_tokens_are_included_in_the_bill(fixtures_dir) -> None:
     assert result.input_tokens == 1700
     assert result.cost_usd == pytest.approx(1700 / 1_000_000 * 0.042)
     assert brain.total_input_tokens == 1000
+
+
+async def test_an_empty_screen_aborts_without_spending_a_model_call() -> None:
+    """A warning-only version burned ten calls reading a window that was not there."""
+    brain = ScriptedBrain([("anything", 0.0, 0.0, 0.9)] * 10)
+    result = await run(
+        goal="Go",
+        computer=ReplayComputer([{"role": "window", "label": "", "children": []}]),
+        brain=brain,
+        max_steps=8,
+    )
+    assert result.verdict is Verdict.ABORT
+    assert "no readable elements" in result.reason
+    assert result.calls == 0
+    assert result.input_tokens == 0

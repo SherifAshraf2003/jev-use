@@ -48,6 +48,11 @@ def find_pid(app_name: str) -> int:
     raise LookupError(f"no running application matching {app_name!r}")
 
 
+def _windows_for(pid: int) -> list[Any]:
+    app = AX.AXUIElementCreateApplication(pid)
+    return list(_attribute(app, AX.kAXWindowsAttribute) or [])
+
+
 def _attribute(element: Any, name: Any) -> Any:
     err, value = AX.AXUIElementCopyAttributeValue(element, name, None)
     return value if err == 0 else None
@@ -130,13 +135,18 @@ class MacComputer:
                 "the grant every accessibility read returns empty with no error raised."
             )
         pid = find_pid(app_name)
+        if not _windows_for(pid):
+            raise LookupError(
+                f"{app_name} is running but has no open windows, so there is nothing "
+                "to read. Open a window in it and try again. (A minimized or fully "
+                "closed window reports the same way.)"
+            )
         bounds = Quartz.CGDisplayBounds(Quartz.CGMainDisplayID())
         return cls(pid, (int(bounds.size.width), int(bounds.size.height)))
 
     async def tree(self) -> Any:
         """Walk every window of the target application."""
-        app = AX.AXUIElementCreateApplication(self._pid)
-        windows = _attribute(app, AX.kAXWindowsAttribute) or []
+        windows = _windows_for(self._pid)
         if not windows:
             logger.warning("application pid=%s has no open windows", self._pid)
         return {

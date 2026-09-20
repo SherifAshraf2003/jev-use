@@ -90,6 +90,17 @@ async def run(
         for step in range(1, max_steps + 1):
             history.step = step
             elements = parse_tree(await computer.tree(), screen_bounds=screen_bounds)
+            if not elements:
+                # Nothing readable on screen. Continuing would spend a model call
+                # per step choosing between scroll, key and wait until the stall
+                # detector gives up, which is what a warning-only version did.
+                verdict = Verdict.ABORT
+                reason = (
+                    "the target application presented no readable elements; "
+                    "it may have no open window, or Accessibility may be denied"
+                )
+                logger.error("%s", reason)
+                break
             actions = enumerate_actions(elements, inputs, banned)
             decision = await brain.decide(goal, rules, elements, actions, history_lines)
             calls += 1
