@@ -159,3 +159,25 @@ async def test_reading_the_tree_does_not_steal_focus(monkeypatch) -> None:
     await computer.tree()
     await computer.screen_size()
     assert activated == []
+
+
+async def test_focus_is_rechecked_before_every_event_not_cached(monkeypatch) -> None:
+    """Focus moved back to the terminal mid-run and a cached answer let typing follow it."""
+    import jev_use.computers.mac as mac
+
+    front = {"value": True}
+    activations: list[int] = []
+
+    def activate(pid):
+        activations.append(pid)
+        front["value"] = True
+
+    monkeypatch.setattr(mac, "_activate", activate)
+    monkeypatch.setattr(mac, "_is_frontmost", lambda pid: front["value"])
+    monkeypatch.setattr(mac, "ACTIVATE_SETTLE_SECONDS", 0)
+    computer = MacComputer(pid=5, screen=(1920, 1080), events=FakeQuartz())
+    await computer.click(1, 1)
+    assert activations == []
+    front["value"] = False  # the user, or anything else, brings another app forward
+    await computer.type_text("youtube")
+    assert activations == [5]

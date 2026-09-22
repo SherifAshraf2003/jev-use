@@ -83,6 +83,8 @@ class Action:
         return f"{self.kind}:{index}:{self.text or '-'}"
 
 
+_truncation_warned = False
+
 FALLBACK_ACTIONS: tuple[Action, ...] = (
     Action(kind="scroll", text="down"),
     Action(kind="scroll", text="up"),
@@ -141,7 +143,10 @@ def enumerate_actions(
     room = max(min(max_candidates, MAX_CHOICE_OPTIONS) - len(fallbacks), 0)
 
     if len(keep) > room:
-        logger.warning(
+        global _truncation_warned
+        log = logger.debug if _truncation_warned else logger.warning
+        _truncation_warned = True
+        log(
             "truncating candidates: %d element actions available, %d offered. "
             "Truncation is in tree order, so the dropped actions are arbitrary and "
             "the agent cannot select them. See docs/DEVIATIONS.md D18.",

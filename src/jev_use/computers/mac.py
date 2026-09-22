@@ -120,15 +120,23 @@ def _running_app(pid: int) -> Any:
 
 
 def _is_frontmost(pid: int) -> bool:
-    front = AppKit.NSWorkspace.sharedWorkspace().frontmostApplication()
-    return bool(front is not None and int(front.processIdentifier()) == pid)
+    """Ask the application itself, live, whether it is frontmost.
+
+    Not NSWorkspace.frontmostApplication: that value is only refreshed by a run
+    loop, which a command-line process does not have. Measured: after switching
+    to Finder, NSWorkspace still reported Chrome while AX correctly said Finder.
+    Trusting it let keystrokes meant for the browser land in the terminal.
+    """
+    app = AX.AXUIElementCreateApplication(pid)
+    return _attribute(app, "AXFrontmost") is True
 
 
 def _activate(pid: int) -> None:
-    app = _running_app(pid)
-    if app is None:
-        return
-    app.activateWithOptions_(AppKit.NSApplicationActivateIgnoringOtherApps)
+    AX.AXUIElementSetAttributeValue(AX.AXUIElementCreateApplication(pid), "AXFrontmost", True)
+    if not _is_frontmost(pid):
+        app = _running_app(pid)
+        if app is not None:
+            app.activateWithOptions_(AppKit.NSApplicationActivateIgnoringOtherApps)
 
 
 def _attribute(element: Any, name: Any) -> Any:
@@ -202,7 +210,6 @@ class MacComputer:
         self._pid = pid
         self._screen = screen
         self._events = events if events is not None else QuartzEvents()
-        self._activated = False
 
     async def _ensure_frontmost(self) -> None:
         """Raise the target application before synthesizing any input.
@@ -214,7 +221,9 @@ class MacComputer:
         keystrokes go to the wrong application entirely — in one live run a URL
         meant for the browser was typed into the terminal that launched the run.
         """
-        if self._activated and _is_frontmost(self._pid):
+        # Checked live before every event, never cached: focus can move between
+        # steps, and a cached answer is how input reached the wrong application.
+        if _is_frontmost(self._pid):
             return
         _activate(self._pid)
         await asyncio.sleep(ACTIVATE_SETTLE_SECONDS)
@@ -228,7 +237,6 @@ class MacComputer:
                 f"the target application (pid {self._pid}) could not be brought to the "
                 "front, so synthesized input would reach whatever is in front instead"
             )
-        self._activated = True
 
     @classmethod
     async def attach(cls, app_name: str) -> Self:

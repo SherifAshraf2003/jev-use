@@ -32,6 +32,9 @@ DEMO_SCRIPT: list[tuple[str | None, float, float, float]] = [
 ]
 
 
+DEFAULT_DO_TRACE = Path("traces/last.jsonl")
+
+
 class OfflineBrain:
     """Replays a fixed script. No network, no key, deterministic output."""
 
@@ -140,7 +143,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="disable the safety supervisor (not recommended)",
     )
-    do.add_argument("--trace", type=Path, default=Path("traces/last.jsonl"))
+    do.add_argument("--trace", type=Path, default=DEFAULT_DO_TRACE)
     do.add_argument("--dry-run", action="store_true")
 
     replay = sub.add_parser("replay", help="pretty-print a saved trajectory")
@@ -314,6 +317,8 @@ def _cmd_do(args: argparse.Namespace) -> int:
         print(f"typing: {', '.join(repr(v) for v in inputs.values()) or 'nothing'}")
         print()
 
+        if args.trace == DEFAULT_DO_TRACE:
+            args.trace.unlink(missing_ok=True)
         computer = await MacComputer.open(str(app))
         try:
             result = await run_loop(

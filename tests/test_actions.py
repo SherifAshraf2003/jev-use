@@ -68,8 +68,11 @@ def test_fallbacks_survive_truncation() -> None:
         assert fallback.signature() in {a.signature() for a in actions}
 
 
-def test_truncation_logs_a_warning(caplog) -> None:
+def test_truncation_logs_a_warning(caplog, monkeypatch) -> None:
     """D18: truncation is a silent correctness failure unless it is visible."""
+    import jev_use.actions as actions_module
+
+    monkeypatch.setattr(actions_module, "_truncation_warned", False)
     elements = [button(f"b{i}", f"e{i}") for i in range(400)]
     with caplog.at_level(logging.WARNING, logger="jev_use.actions"):
         enumerate_actions(elements, {}, set(), max_candidates=50)
@@ -119,3 +122,14 @@ def test_typing_actions_are_never_truncated() -> None:
     actions = enumerate_actions(clicks + [address], {"url": "x.com"}, set(), max_candidates=50)
     assert any(a.kind == "type" for a in actions)
     assert len(actions) == 50
+
+
+def test_truncation_warns_once_then_stays_quiet(caplog, monkeypatch) -> None:
+    import jev_use.actions as actions_module
+
+    monkeypatch.setattr(actions_module, "_truncation_warned", False)
+    elements = [button(f"b{i}", f"e{i}") for i in range(400)]
+    with caplog.at_level(logging.WARNING, logger="jev_use.actions"):
+        for _ in range(5):
+            enumerate_actions(elements, {}, set(), max_candidates=50)
+    assert len([r for r in caplog.records if r.levelno == logging.WARNING]) == 1
