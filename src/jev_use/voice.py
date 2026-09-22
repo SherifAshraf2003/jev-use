@@ -35,6 +35,52 @@ FINALIZE_SECONDS = 1.5
 SETTINGS_PATH = "System Settings > Privacy & Security"
 
 
+class SegmentStitcher:
+    """Rebuild one utterance from partial transcriptions that restart after pauses.
+
+    On-device recognition restarts its transcription after a pause: measured,
+    "Search for Claude code skills", a pause, then the next partial is just "In"
+    and it continues from there, with the earlier words gone. A trailing silence
+    can do the same and leave an empty transcription. Keeping only the latest
+    partial therefore lost the command even though every word had been heard.
+
+    Word timestamps cannot tell a restart from an ordinary revision, since both
+    report the first word at 0. So a partial counts as a restart when it is
+    empty, or when it both changes the first word and gets shorter; revisions
+    such as "Sofa for" becoming "Search for" keep their length and are not.
+    """
+
+    def __init__(self) -> None:
+        self._committed: list[str] = []
+        self._current = ""
+
+    def update(self, text: str) -> bool:
+        """Feed one partial. Returns True if it carried new speech."""
+        text = text.strip()
+        if text == self._current:
+            return False
+        if not text:
+            self._commit()
+            return False
+        if self._current and self._is_restart(text):
+            self._commit()
+        self._current = text
+        return True
+
+    def _is_restart(self, text: str) -> bool:
+        new, old = text.split(), self._current.split()
+        return new[0].lower() != old[0].lower() and len(new) < len(old)
+
+    def _commit(self) -> None:
+        if self._current:
+            self._committed.append(self._current)
+        self._current = ""
+
+    @property
+    def text(self) -> str:
+        return " ".join([*self._committed, self._current]).strip()
+
+
 def _pump(seconds: float) -> None:
     NSRunLoop.currentRunLoop().runUntilDate_(NSDate.dateWithTimeIntervalSinceNow_(seconds))
 
@@ -105,21 +151,24 @@ def listen_once(
             f"{SETTINGS_PATH} > Microphone, then restart the terminal."
         )
 
-    state: dict[str, Any] = {"text": "", "last": None, "final": False}
+    stitcher = SegmentStitcher()
+    state: dict[str, Any] = {"last": None, "final": False}
     lock = threading.Lock()
 
     def handle(result: Any, error: Any) -> None:
         with lock:
             if result is not None:
-                text = str(result.bestTranscription().formattedString())
-                if text != state["text"]:
-                    state["text"] = text
+                partial = str(result.bestTranscription().formattedString())
+                logger.debug("partial %r final=%s", partial, bool(result.isFinal()))
+                # Only real speech resets the silence timer; a restart to empty is not speech.
+                if stitcher.update(partial):
                     state["last"] = time.monotonic()
                     if on_partial is not None:
-                        on_partial(text)
+                        on_partial(stitcher.text)
                 if result.isFinal():
                     state["final"] = True
             if error is not None:
+                logger.debug("recognition ended: %s", error)
                 state["final"] = True
 
     task = recognizer.recognitionTaskWithRequest_resultHandler_(request, handle)
@@ -149,6 +198,8 @@ def listen_once(
             if state["final"]:
                 break
         _pump(0.05)
-    task.cancel()
+    # Read before cancelling: cancelling delivers one more callback on another thread.
     with lock:
-        return str(state["text"]).strip()
+        heard = stitcher.text
+    task.cancel()
+    return heard

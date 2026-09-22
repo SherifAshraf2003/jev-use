@@ -403,7 +403,7 @@ def _cmd_listen(args: argparse.Namespace) -> int:
             print("listening…", flush=True)
             try:
                 heard = listen_once(
-                    args.locale, on_partial=lambda t: print(f"\r  {t}", end="", flush=True)
+                    args.locale, on_partial=lambda t: print(f"\r\033[K  {t}", end="", flush=True)
                 )
             except (PermissionError, RuntimeError) as exc:
                 print(f"\n{exc}", file=sys.stderr)
