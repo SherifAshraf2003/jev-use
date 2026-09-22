@@ -37,6 +37,9 @@ LABEL_ATTRS = (
     AX.kAXDescriptionAttribute,
     "AXPlaceholderValue",
     AX.kAXValueAttribute,
+    # The hover tooltip: last resort, but it is the only name many icon-only
+    # toolbar buttons have. Measured on WhatsApp, it named one of four unnamed buttons.
+    "AXHelp",
 )
 
 SETTINGS_PATH = "System Settings > Privacy & Security > Accessibility"
