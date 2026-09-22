@@ -111,3 +111,51 @@ BLOCKER_CRITERIA = {
     "error": "An error message or failure state is shown.",
     "paywall": "Payment or a subscription is required to continue.",
 }
+
+# --- Turning a spoken or typed sentence into an app and inputs (jev-use do) ---
+
+NO_TEXT_OPTION = "(nothing from what the user said should be typed here)"
+
+APP_CHOICE_INSTRUCTIONS = {
+    "question": "Which application does the user want to use?",
+    "context": (
+        "The request may have been spoken aloud and transcribed, so the application "
+        "name can be misspelled, abbreviated, or said informally, such as 'chrome' "
+        "for Google Chrome."
+    ),
+}
+
+INPUT_FIELD_INSTRUCTIONS = {
+    "address_bar": {
+        "question": (
+            "Which exact piece of `what_the_user_said` should be typed into a web "
+            "browser's address bar to reach the site they want?"
+        ),
+        "guidance": "Choose the nothing option unless the user wants to go to a website.",
+    },
+    "search_box": {
+        "question": (
+            "Which exact piece of `what_the_user_said` is the thing they want to search "
+            "for, to be typed into a search box?"
+        ),
+        "guidance": (
+            "Choose the nothing option if the user only wants to open a site or an "
+            "application and has not asked to search for anything."
+        ),
+    },
+    "text_field": {
+        "question": (
+            "Which exact piece of `what_the_user_said` is text they want written into a "
+            "document, note, or message?"
+        ),
+        "guidance": "Choose the nothing option unless the user asked for text to be written.",
+    },
+}
+
+DEFAULT_RULES = [
+    "Never sign in to any account",
+    "Never enter payment details",
+    "Never place an order or confirm a purchase",
+    "Never send a message, email, or form",
+    "Never delete anything",
+]

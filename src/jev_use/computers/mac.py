@@ -13,6 +13,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import subprocess
+import time
+from pathlib import Path
 from typing import Any, Literal, Self
 
 import AppKit
@@ -83,6 +86,33 @@ def _windows_for(pid: int) -> list[Any]:
         if windows:
             break
     return windows
+
+
+APP_DIRECTORIES = (
+    Path("/Applications"),
+    Path("/System/Applications"),
+    Path("/System/Applications/Utilities"),
+    Path.home() / "Applications",
+)
+LAUNCH_TIMEOUT_SECONDS = 15.0
+
+
+def installed_apps() -> list[str]:
+    """Names of installed applications plus anything running, sorted, no duplicates.
+
+    Running applications are included because some live outside the standard
+    folders. The names are what Jev chooses between for `jev-use do`.
+    """
+    names = {
+        path.stem
+        for directory in APP_DIRECTORIES
+        if directory.is_dir()
+        for path in directory.glob("*.app")
+    }
+    for app in AppKit.NSWorkspace.sharedWorkspace().runningApplications():
+        if app.activationPolicy() == 0 and app.localizedName():
+            names.add(str(app.localizedName()).strip("\u200e"))
+    return sorted(names, key=str.lower)
 
 
 def _running_app(pid: int) -> Any:
@@ -218,6 +248,31 @@ class MacComputer:
             )
         bounds = Quartz.CGDisplayBounds(Quartz.CGMainDisplayID())
         return cls(pid, (int(bounds.size.width), int(bounds.size.height)))
+
+    @classmethod
+    async def open(cls, app_name: str, timeout: float = LAUNCH_TIMEOUT_SECONDS) -> Self:
+        """Attach to an application, launching it or opening a window if needed.
+
+        `open -a` launches an application that is not running, and sends a
+        running one the reopen event, which gives a window to most applications
+        that have none — Chrome included.
+        """
+        try:
+            return await cls.attach(app_name)
+        except LookupError:
+            pass
+        subprocess.run(["open", "-a", app_name], check=False, capture_output=True)
+        deadline = time.monotonic() + timeout
+        last_error: LookupError | None = None
+        while time.monotonic() < deadline:
+            await asyncio.sleep(0.25)
+            try:
+                return await cls.attach(app_name)
+            except LookupError as exc:
+                last_error = exc
+        raise LookupError(
+            f"opened {app_name} but it showed no window within {timeout:.0f}s"
+        ) from last_error
 
     async def tree(self) -> Any:
         """Walk every window of the target application."""

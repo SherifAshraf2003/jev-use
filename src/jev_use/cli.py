@@ -13,7 +13,7 @@ from typing import Any
 
 from jev_use import __version__
 from jev_use.actions import enumerate_actions
-from jev_use.brain import Decision, JevBrain
+from jev_use.brain import USD_PER_MTOK_INPUT, Decision, JevBrain
 from jev_use.computers.replay import ReplayComputer
 from jev_use.loop import run as run_loop
 from jev_use.policy import Thresholds
@@ -126,6 +126,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run.add_argument("--trace", type=Path, default=None)
     run.add_argument("--dry-run", action="store_true")
+
+    do = sub.add_parser("do", help="say what you want in plain words")
+    do.add_argument("sentence", help='e.g. "open chrome and go to youtube"')
+    do.add_argument("--app", default=None, help="skip app detection and use this app")
+    do.add_argument("--input", action="append", default=[], metavar="KEY=VALUE")
+    do.add_argument("--rule", action="append", default=[], help="replaces the default rules")
+    do.add_argument("--max-steps", type=int, default=12)
+    do.add_argument(
+        "--unsafe",
+        "--no-supervisor",
+        dest="no_supervisor",
+        action="store_true",
+        help="disable the safety supervisor (not recommended)",
+    )
+    do.add_argument("--trace", type=Path, default=Path("traces/last.jsonl"))
+    do.add_argument("--dry-run", action="store_true")
 
     replay = sub.add_parser("replay", help="pretty-print a saved trajectory")
     replay.add_argument("trace", type=Path)
@@ -256,6 +272,81 @@ def _cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
+# Below this, the app guess is too unsure to act on: ask for --app instead of
+# opening the wrong application.
+APP_CONFIDENCE_FLOOR = 0.5
+
+
+def _cmd_do(args: argparse.Namespace) -> int:
+    key = os.environ.get("TYPESAFE_API_KEY")
+    if not key:
+        print("TYPESAFE_API_KEY is not set. Put it in .env in the project root.", file=sys.stderr)
+        return 2
+    try:
+        overrides = _parse_inputs(args.input)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    try:
+        from typesafe_sdk import AsyncTypeSafeClient
+
+        from jev_use.computers.mac import MacComputer, installed_apps
+        from jev_use.intent import parse_intent
+        from jev_use.prompts import DEFAULT_RULES
+        from jev_use.supervisor import Supervisor
+    except ImportError as exc:
+        print(f"pyobjc is required for `do`: {exc}", file=sys.stderr)
+        return 2
+
+    async def go() -> Any:
+        client = AsyncTypeSafeClient(api_key=key)
+        intent = await parse_intent(client, args.sentence, None if args.app else installed_apps())
+        app = args.app or intent.app
+        if not args.app and intent.app_confidence < APP_CONFIDENCE_FLOOR:
+            print(
+                f"not sure which app you mean (best guess {intent.app!r} at "
+                f"{intent.app_confidence:.2f}). Say it again, or pass --app.",
+                file=sys.stderr,
+            )
+            return None
+        inputs = {**intent.inputs, **overrides}
+        print(f"app:    {app}" + ("" if args.app else f"  ({intent.app_confidence:.2f})"))
+        print(f"typing: {', '.join(repr(v) for v in inputs.values()) or 'nothing'}")
+        print()
+
+        computer = await MacComputer.open(str(app))
+        try:
+            result = await run_loop(
+                goal=args.sentence,
+                computer=computer,
+                brain=JevBrain(client),
+                inputs=inputs,
+                rules=args.rule or list(DEFAULT_RULES),
+                thresholds=Thresholds(),
+                supervisor=None if args.no_supervisor else Supervisor(client),
+                max_steps=args.max_steps,
+                trace_path=args.trace,
+                dry_run=args.dry_run,
+            )
+        finally:
+            await computer.close()
+        # The intent request is part of what this command cost.
+        result.input_tokens += intent.input_tokens
+        result.cost_usd += intent.input_tokens / 1_000_000 * USD_PER_MTOK_INPUT
+        result.calls += 1
+        return result
+
+    try:
+        result = asyncio.run(go())
+    except (PermissionError, LookupError, RuntimeError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    if result is None:
+        return 2
+    _print_summary(result)
+    return 0
+
+
 def _cmd_replay(args: argparse.Namespace) -> int:
     print(format_trace(read_trace(args.trace)))
     return 0
@@ -272,6 +363,7 @@ def main(argv: list[str] | None = None) -> int:
         "decide": _cmd_decide,
         "run": _cmd_run,
         "replay": _cmd_replay,
+        "do": _cmd_do,
     }
     return int(handlers[args.command](args))
 

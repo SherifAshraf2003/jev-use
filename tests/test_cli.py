@@ -131,3 +131,18 @@ def test_missing_dotenv_is_not_an_error(tmp_path) -> None:
     from jev_use.cli import load_dotenv
 
     assert load_dotenv(tmp_path / "nowhere") is None or True
+
+
+def test_do_takes_a_plain_sentence() -> None:
+    args = build_parser().parse_args(["do", "open chrome and go to youtube"])
+    assert args.command == "do"
+    assert args.sentence == "open chrome and go to youtube"
+    assert args.app is None
+    assert args.no_supervisor is False
+
+
+def test_do_without_a_key_fails_clearly(monkeypatch, capsys, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+    assert main(["do", "open chrome"]) != 0
+    assert "TYPESAFE_API_KEY" in capsys.readouterr().err
