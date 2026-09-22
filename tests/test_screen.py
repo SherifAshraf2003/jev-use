@@ -165,3 +165,26 @@ def test_focus_is_parsed_from_platform_keys() -> None:
     assert parsed["A"] == (True, False)
     assert parsed["B"] == (False, True)
     assert parsed["C"] == (False, False)
+
+
+def test_interactive_elements_survive_the_cap() -> None:
+    """Chrome lists its toolbar after page content; tree-order truncation lost the address bar."""
+    tree = {
+        "role": "window",
+        "label": "W",
+        "children": [{"role": "text", "label": f"t{i}", "children": []} for i in range(300)]
+        + [{"role": "textfield", "label": "Address and search bar", "children": []}],
+    }
+    labels = [e.label for e in parse_tree(tree, max_elements=50)]
+    assert "Address and search bar" in labels
+    assert len(labels) == 50
+
+
+def test_editable_fields_outrank_buttons_under_the_cap() -> None:
+    tree = {
+        "role": "window",
+        "label": "W",
+        "children": [{"role": "button", "label": f"b{i}", "children": []} for i in range(300)]
+        + [{"role": "textfield", "label": "Address and search bar", "children": []}],
+    }
+    assert "Address and search bar" in [e.label for e in parse_tree(tree, max_elements=50)]

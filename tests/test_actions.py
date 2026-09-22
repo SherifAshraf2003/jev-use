@@ -110,3 +110,12 @@ def test_descriptions_are_unique_within_a_step() -> None:
     actions = enumerate_actions(elements, {"x": "1"}, set())
     described = [a.describe() for a in actions]
     assert len(described) == len(set(described))
+
+
+def test_typing_actions_are_never_truncated() -> None:
+    """They exist only because the caller supplied input; cutting them loses the intent."""
+    clicks = [button(f"b{i}", f"e{i}") for i in range(400)]
+    address = Element(index="e999", role="textfield", label="Address", bbox=(0, 0, 100, 10))
+    actions = enumerate_actions(clicks + [address], {"url": "x.com"}, set(), max_candidates=50)
+    assert any(a.kind == "type" for a in actions)
+    assert len(actions) == 50

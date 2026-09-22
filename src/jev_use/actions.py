@@ -149,4 +149,11 @@ def enumerate_actions(
             room,
         )
 
-    return _disambiguate(keep[:room]) + fallbacks
+    # Typing actions exist only because the caller supplied an input, so they are
+    # the caller's stated intent and are never the ones cut. Clicks fill the rest,
+    # and tree order is restored so ordinals still mean screen order.
+    order = {id(a): i for i, a in enumerate(keep)}
+    typing = [a for a in keep if a.kind == "type"][:room]
+    clicks = [a for a in keep if a.kind != "type"][: room - len(typing)]
+    offered = sorted(typing + clicks, key=lambda a: order[id(a)])
+    return _disambiguate(offered) + fallbacks

@@ -60,6 +60,27 @@ ROLE_VOCABULARY = frozenset(
     }
 )
 
+# Roles the agent can act on. When a screen exceeds the element cap, these are
+# kept first: Chrome lists its toolbar after the page content, so plain tree-order
+# truncation dropped the address bar at position 1,239 of 1,347.
+INTERACTIVE_ROLES = frozenset(
+    {
+        "button",
+        "link",
+        "textfield",
+        "checkbox",
+        "radio",
+        "combobox",
+        "menuitem",
+        "tab",
+        "listitem",
+        "cell",
+        "slider",
+    }
+)
+
+EDITABLE_ROLES = frozenset({"textfield", "combobox"})
+
 ROLE_ALIASES = {
     "axapplication": "window",
     "application": "window",
@@ -255,6 +276,18 @@ def parse_tree(
                 selected=bool(_first(node, SELECTED_KEYS)),
             )
         )
-        if len(elements) >= max_elements:
-            break
-    return elements
+    if len(elements) <= max_elements:
+        return elements
+    # Over the cap: keep every interactive element (up to the cap), fill the rest
+    # with non-interactive context, then restore tree order.
+    # Priority: editable fields (few, and the only place text can go), then other
+    # interactive elements, then non-interactive context.
+    order = {id(e): i for i, e in enumerate(elements)}
+    editable = [e for e in elements if e.role in EDITABLE_ROLES][:max_elements]
+    room = max_elements - len(editable)
+    clickable = [
+        e for e in elements if e.role in INTERACTIVE_ROLES and e.role not in EDITABLE_ROLES
+    ][:room]
+    room -= len(clickable)
+    context = [e for e in elements if e.role not in INTERACTIVE_ROLES][:room]
+    return sorted(editable + clickable + context, key=lambda e: order[id(e)])
