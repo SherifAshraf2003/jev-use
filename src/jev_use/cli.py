@@ -291,8 +291,28 @@ def _cmd_run(args: argparse.Namespace) -> int:
 APP_CONFIDENCE_FLOOR = 0.5
 
 
+def _terminal_approver(terminal_pid: int | None) -> Any:
+    """Ask at the keyboard. Brings the terminal forward first so the answer lands here."""
+
+    async def approve(action: str, reason: str) -> bool:
+        if terminal_pid is not None:
+            from jev_use.computers.mac import _activate
+
+            _activate(terminal_pid)
+        print(f"\n⚠  {reason}")
+        print(f"   wants to: {action}")
+        answer = await asyncio.to_thread(input, "   allow? [y/N] ")
+        return answer.strip().lower() in {"y", "yes"}
+
+    return approve
+
+
 async def _do_sentence(
-    key: str, sentence: str, args: argparse.Namespace, current_app: str | None = None
+    key: str,
+    sentence: str,
+    args: argparse.Namespace,
+    current_app: str | None = None,
+    terminal_pid: int | None = None,
 ) -> tuple[Any, str | None]:
     """Understand one sentence and carry it out. Shared by `do` and `listen`.
 
@@ -339,6 +359,7 @@ async def _do_sentence(
             max_steps=args.max_steps,
             trace_path=args.trace,
             dry_run=args.dry_run,
+            approve=_terminal_approver(terminal_pid),
         )
     finally:
         await computer.close()
@@ -361,7 +382,9 @@ def _cmd_do(args: argparse.Namespace) -> int:
     if key is None:
         return 2
     try:
-        result, _ = asyncio.run(_do_sentence(key, args.sentence, args))
+        from jev_use.computers.mac import _frontmost_pid
+
+        result, _ = asyncio.run(_do_sentence(key, args.sentence, args, None, _frontmost_pid()))
     except ImportError as exc:
         print(f"pyobjc is required for `do`: {exc}", file=sys.stderr)
         return 2
@@ -414,7 +437,9 @@ def _cmd_listen(args: argparse.Namespace) -> int:
                 continue
             print(f"heard: {heard}\n")
             try:
-                result, used = asyncio.run(_do_sentence(key, heard, args, current_app))
+                result, used = asyncio.run(
+                    _do_sentence(key, heard, args, current_app, terminal_pid)
+                )
             except (ValueError, PermissionError, LookupError, RuntimeError) as exc:
                 print(str(exc), file=sys.stderr)
                 result, used = None, None

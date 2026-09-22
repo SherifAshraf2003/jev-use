@@ -256,3 +256,51 @@ async def test_no_warning_when_inputs_are_supplied(caplog) -> None:
             max_steps=1,
         )
     assert not any("no --input supplied" in r.message for r in caplog.records)
+
+
+class _Veto:
+    total_input_tokens = 0
+    cost_usd = 0.0
+
+    async def review(self, goal, rules, elements, action):
+        class R:
+            injection = 0.0
+            rule_breach = 0.0
+            irreversible = 0.9
+            blocker = "none"
+            blocker_confidence = 0.0
+            latency_ms = 1.0
+            input_tokens = 0
+
+        return R()
+
+
+async def test_an_approved_action_runs_instead_of_stopping(fixtures_dir) -> None:
+    asked = []
+
+    async def yes(action, reason):
+        asked.append(action)
+        return True
+
+    computer = ReplayComputer(trees(fixtures_dir))
+    brain = ScriptedBrain([("Open Browser", 0.01, 1.0, 0.9), (None, 0.99, 4.0, 0.9)])
+    result = await run(
+        goal="Go", computer=computer, brain=brain, supervisor=_Veto(), approve=yes, max_steps=3
+    )
+    assert asked and "Open Browser" in asked[0]
+    assert computer.calls, "the approved action must actually execute"
+    assert result.verdict is Verdict.DONE
+
+
+async def test_a_declined_action_stops_without_executing(fixtures_dir) -> None:
+    async def no(action, reason):
+        return False
+
+    computer = ReplayComputer(trees(fixtures_dir))
+    brain = ScriptedBrain([("Open Browser", 0.01, 1.0, 0.9)])
+    result = await run(
+        goal="Go", computer=computer, brain=brain, supervisor=_Veto(), approve=no, max_steps=3
+    )
+    assert result.verdict is Verdict.ASK_HUMAN
+    assert "declined" in result.reason
+    assert computer.calls == []

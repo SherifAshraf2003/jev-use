@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
@@ -17,6 +18,9 @@ from jev_use.trace import TraceWriter, top_n
 logger = logging.getLogger(__name__)
 
 TERMINAL_VERDICTS = frozenset({Verdict.DONE, Verdict.ASK_HUMAN, Verdict.ABORT})
+
+# Asked when the policy wants a human: (action description, reason) -> allowed?
+Approver = Callable[[str, str], Awaitable[bool]]
 
 
 class Brain(Protocol):
@@ -71,6 +75,7 @@ async def run(
     max_steps: int = 25,
     trace_path: Path | str | None = None,
     dry_run: bool = False,
+    approve: Approver | None = None,
 ) -> RunResult:
     """Drive the machine until the task is done, blocked, or out of steps."""
     inputs = inputs or {}
@@ -170,7 +175,17 @@ async def run(
 
             history.progress_history.append(decision.progress)
 
-            if verdict in TERMINAL_VERDICTS:
+            if verdict is Verdict.ASK_HUMAN and approve is not None and decision.action is not None:
+                # A person decides. Without this the run could only stop, and a
+                # dialog left on screen blocked every later command the same way.
+                allowed = await approve(decision.action.describe(), reason)
+                if writer is not None:
+                    writer.write_step(step=step, verdict="human", approved=allowed, reason=reason)
+                if not allowed:
+                    reason = f"declined by the user: {reason}"
+                    break
+                verdict = Verdict.ACT
+            elif verdict in TERMINAL_VERDICTS:
                 break
             if verdict is Verdict.RETRY:
                 banned.add(judgments.selected_signature)
