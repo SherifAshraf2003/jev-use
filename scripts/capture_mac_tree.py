@@ -15,7 +15,12 @@ import ApplicationServices as AX
 OUT_DIR = pathlib.Path(__file__).parent.parent / "tests/fixtures/trees"
 MAX_DEPTH = 30
 
-LABEL_ATTRS = (AX.kAXTitleAttribute, AX.kAXDescriptionAttribute, AX.kAXValueAttribute)
+LABEL_ATTRS = (
+    AX.kAXTitleAttribute,
+    AX.kAXDescriptionAttribute,
+    "AXPlaceholderValue",
+    AX.kAXValueAttribute,
+)
 
 
 def attribute(element, name):

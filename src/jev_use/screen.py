@@ -102,7 +102,9 @@ ROLE_ALIASES = {
     "radio button": "radio",
     "axcombobox": "combobox",
     "combo box": "combobox",
-    "axpopupbutton": "combobox",
+    # A pop-up button opens a menu; it takes clicks, not text. Mapping it to
+    # combobox made every menu button a typing target.
+    "axpopupbutton": "button",
     "axmenuitem": "menuitem",
     "menu item": "menuitem",
     "axmenubaritem": "menuitem",

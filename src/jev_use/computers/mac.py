@@ -28,7 +28,16 @@ logger = logging.getLogger(__name__)
 # resolved at 28 on the captured browser window. See docs/DEVIATIONS.md D13.
 MAX_DEPTH = 30
 SCROLL_LINES = 3
-LABEL_ATTRS = (AX.kAXTitleAttribute, AX.kAXDescriptionAttribute, AX.kAXValueAttribute)
+# Placeholder comes before value: a field's placeholder says what the field is for
+# ("Search"), its value is whatever happens to be typed in it. YouTube's search
+# box has no title or description at all, only a placeholder, so without it the
+# box was dropped as unlabelled and the agent could never type a search.
+LABEL_ATTRS = (
+    AX.kAXTitleAttribute,
+    AX.kAXDescriptionAttribute,
+    "AXPlaceholderValue",
+    AX.kAXValueAttribute,
+)
 
 SETTINGS_PATH = "System Settings > Privacy & Security > Accessibility"
 

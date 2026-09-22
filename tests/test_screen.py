@@ -188,3 +188,8 @@ def test_editable_fields_outrank_buttons_under_the_cap() -> None:
         + [{"role": "textfield", "label": "Address and search bar", "children": []}],
     }
     assert "Address and search bar" in [e.label for e in parse_tree(tree, max_elements=50)]
+
+
+def test_popup_buttons_are_buttons_not_text_fields() -> None:
+    tree = {"role": "AXPopUpButton", "label": "Account menu", "children": []}
+    assert parse_tree(tree)[0].role == "button"
