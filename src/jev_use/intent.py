@@ -61,11 +61,14 @@ async def parse_intent(
     goal: str,
     apps: list[str] | None,
     *,
+    current_app: str | None = None,
     model: str = DEFAULT_MODEL,
 ) -> Intent:
     """One request: which application, and what text goes in which kind of field.
 
     Pass `apps=None` when the application is already known, to skip that question.
+    Pass `current_app` in a spoken session so a follow-up such as "now search for
+    X" resolves against the application already in use rather than guessing afresh.
     """
     options = [*goal_spans(goal), prompts.NO_TEXT_OPTION]
     questions: dict[str, Any] = {
@@ -79,7 +82,10 @@ async def parse_intent(
         )
 
     started = time.perf_counter()
-    response = await client.system_one({"what_the_user_said": goal}, questions, model=model)
+    state: dict[str, Any] = {"what_the_user_said": goal}
+    if current_app:
+        state["application_already_open_and_in_front"] = current_app
+    response = await client.system_one(state, questions, model=model)
     latency_ms = (time.perf_counter() - started) * 1000
 
     inputs: dict[str, str] = {}

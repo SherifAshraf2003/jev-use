@@ -123,6 +123,14 @@ APP_CHOICE_INSTRUCTIONS = {
         "name can be misspelled, abbreviated, or said informally, such as 'chrome' "
         "for Google Chrome."
     ),
+    "guidance": [
+        (
+            "If `application_already_open_and_in_front` is given and the user does not "
+            "name a different application, they are most likely continuing in that one: "
+            "a follow-up such as 'now search for X' refers to what is already on screen."
+        ),
+        "Choose a different application only when the user names it or clearly needs it.",
+    ],
 }
 
 INPUT_FIELD_INSTRUCTIONS = {

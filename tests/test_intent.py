@@ -93,3 +93,20 @@ async def test_app_options_are_capped() -> None:
     client = FakeClient({"app": ("App 1", 0.9)})
     await parse_intent(client, "open app 1", [f"App {i}" for i in range(400)])
     assert len(client.calls[0][1]["app"].criteria) <= 255
+
+
+async def test_current_app_is_given_to_the_model_as_context() -> None:
+    client = FakeClient({"app": ("Google Chrome", 0.9)})
+    await parse_intent(
+        client,
+        "now search for lofi music",
+        ["Google Chrome", "Spotify"],
+        current_app="Google Chrome",
+    )
+    assert client.calls[0][0]["application_already_open_and_in_front"] == "Google Chrome"
+
+
+async def test_no_context_when_there_is_no_current_app() -> None:
+    client = FakeClient({"app": ("Google Chrome", 0.9)})
+    await parse_intent(client, "open chrome", ["Google Chrome"])
+    assert "application_already_open_and_in_front" not in client.calls[0][0]

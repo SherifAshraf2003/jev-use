@@ -291,10 +291,13 @@ def _cmd_run(args: argparse.Namespace) -> int:
 APP_CONFIDENCE_FLOOR = 0.5
 
 
-async def _do_sentence(key: str, sentence: str, args: argparse.Namespace) -> Any:
+async def _do_sentence(
+    key: str, sentence: str, args: argparse.Namespace, current_app: str | None = None
+) -> tuple[Any, str | None]:
     """Understand one sentence and carry it out. Shared by `do` and `listen`.
 
-    Returns the RunResult, or None if the application could not be determined.
+    Returns the RunResult and the application used, or (None, None) if the
+    application could not be determined.
     """
     from typesafe_sdk import AsyncTypeSafeClient
 
@@ -305,7 +308,9 @@ async def _do_sentence(key: str, sentence: str, args: argparse.Namespace) -> Any
 
     overrides = _parse_inputs(args.input)
     client = AsyncTypeSafeClient(api_key=key)
-    intent = await parse_intent(client, sentence, None if args.app else installed_apps())
+    intent = await parse_intent(
+        client, sentence, None if args.app else installed_apps(), current_app=current_app
+    )
     app = args.app or intent.app
     if not args.app and intent.app_confidence < APP_CONFIDENCE_FLOOR:
         print(
@@ -313,7 +318,7 @@ async def _do_sentence(key: str, sentence: str, args: argparse.Namespace) -> Any
             f"{intent.app_confidence:.2f}). Say it again, or pass --app.",
             file=sys.stderr,
         )
-        return None
+        return None, None
     inputs = {**intent.inputs, **overrides}
     print(f"app:    {app}" + ("" if args.app else f"  ({intent.app_confidence:.2f})"))
     print(f"typing: {', '.join(repr(v) for v in inputs.values()) or 'nothing'}")
@@ -341,7 +346,7 @@ async def _do_sentence(key: str, sentence: str, args: argparse.Namespace) -> Any
     result.input_tokens += intent.input_tokens
     result.cost_usd += intent.input_tokens / 1_000_000 * USD_PER_MTOK_INPUT
     result.calls += 1
-    return result
+    return result, str(app)
 
 
 def _require_key() -> str | None:
@@ -356,7 +361,7 @@ def _cmd_do(args: argparse.Namespace) -> int:
     if key is None:
         return 2
     try:
-        result = asyncio.run(_do_sentence(key, args.sentence, args))
+        result, _ = asyncio.run(_do_sentence(key, args.sentence, args))
     except ImportError as exc:
         print(f"pyobjc is required for `do`: {exc}", file=sys.stderr)
         return 2
@@ -388,6 +393,9 @@ def _cmd_listen(args: argparse.Namespace) -> int:
     # The terminal is frontmost right now. Remember it so it can be brought
     # back after each command, ready for the next Enter.
     terminal_pid = _frontmost_pid()
+    # Session memory: the application the last command used, so a follow-up
+    # like "now search for X" continues there instead of guessing afresh.
+    current_app: str | None = None
     print("Press Enter, then say a command. Ctrl-C to quit.")
     try:
         while True:
@@ -406,10 +414,12 @@ def _cmd_listen(args: argparse.Namespace) -> int:
                 continue
             print(f"heard: {heard}\n")
             try:
-                result = asyncio.run(_do_sentence(key, heard, args))
+                result, used = asyncio.run(_do_sentence(key, heard, args, current_app))
             except (ValueError, PermissionError, LookupError, RuntimeError) as exc:
                 print(str(exc), file=sys.stderr)
-                result = None
+                result, used = None, None
+            if used is not None:
+                current_app = used
             if result is not None:
                 _print_summary(result)
             if terminal_pid is not None:
