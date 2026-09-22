@@ -44,7 +44,13 @@ def authorize(timeout: float = 60.0) -> None:
     status = Speech.SFSpeechRecognizer.authorizationStatus()
     if status == Speech.SFSpeechRecognizerAuthorizationStatusNotDetermined:
         answer: dict[str, int] = {}
-        Speech.SFSpeechRecognizer.requestAuthorization_(lambda s: answer.setdefault("s", s))
+
+        # pyobjc aborts the whole process if a callback for a void block returns
+        # anything but None, so these are functions rather than lambdas.
+        def on_answer(status: int) -> None:
+            answer["s"] = status
+
+        Speech.SFSpeechRecognizer.requestAuthorization_(on_answer)
         deadline = time.monotonic() + timeout
         while "s" not in answer and time.monotonic() < deadline:
             _pump(0.1)
@@ -85,12 +91,11 @@ def listen_once(
 
     engine = AVFoundation.AVAudioEngine.alloc().init()
     node = engine.inputNode()
-    node.installTapOnBus_bufferSize_format_block_(
-        0,
-        1024,
-        node.outputFormatForBus_(0),
-        lambda buffer, when: request.appendAudioPCMBuffer_(buffer),
-    )
+
+    def on_audio(buffer: Any, when: Any) -> None:
+        request.appendAudioPCMBuffer_(buffer)
+
+    node.installTapOnBus_bufferSize_format_block_(0, 1024, node.outputFormatForBus_(0), on_audio)
     engine.prepare()
     ok, error = engine.startAndReturnError_(None)
     if not ok:
