@@ -14,6 +14,8 @@ dependencies = [
     "httpx>=0.27",
     "pyobjc-framework-ApplicationServices>=10.3; sys_platform == 'darwin'",
     "pyobjc-framework-Quartz>=10.3; sys_platform == 'darwin'",
+    "pyobjc-framework-Speech>=10.3; sys_platform == 'darwin'",
+    "pyobjc-framework-AVFoundation>=10.3; sys_platform == 'darwin'",
 ]
 
 [project.optional-dependencies]
@@ -48,5 +50,5 @@ omit = ["src/jev_use/computers/mac.py", "src/jev_use/computers/cua.py"]
 [[tool.mypy.overrides]]
 # pyobjc ships no type stubs or py.typed marker. Narrowly scoped to those three
 # modules so the rest of the codebase stays strict.
-module = ["AppKit", "ApplicationServices", "Quartz"]
+module = ["AppKit", "ApplicationServices", "Quartz", "Speech", "AVFoundation", "Foundation"]
 ignore_missing_imports = true

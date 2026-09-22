@@ -146,6 +146,17 @@ def build_parser() -> argparse.ArgumentParser:
     do.add_argument("--trace", type=Path, default=DEFAULT_DO_TRACE)
     do.add_argument("--dry-run", action="store_true")
 
+    listen = sub.add_parser("listen", help="speak commands; each one runs like `do`")
+    listen.add_argument("--once", action="store_true", help="handle one command, then exit")
+    listen.add_argument("--locale", default="en-US")
+    listen.add_argument("--app", default=None)
+    listen.add_argument("--input", action="append", default=[], metavar="KEY=VALUE")
+    listen.add_argument("--rule", action="append", default=[])
+    listen.add_argument("--max-steps", type=int, default=12)
+    listen.add_argument("--unsafe", "--no-supervisor", dest="no_supervisor", action="store_true")
+    listen.add_argument("--trace", type=Path, default=DEFAULT_DO_TRACE)
+    listen.add_argument("--dry-run", action="store_true")
+
     replay = sub.add_parser("replay", help="pretty-print a saved trajectory")
     replay.add_argument("trace", type=Path)
     return parser
@@ -280,76 +291,135 @@ def _cmd_run(args: argparse.Namespace) -> int:
 APP_CONFIDENCE_FLOOR = 0.5
 
 
-def _cmd_do(args: argparse.Namespace) -> int:
+async def _do_sentence(key: str, sentence: str, args: argparse.Namespace) -> Any:
+    """Understand one sentence and carry it out. Shared by `do` and `listen`.
+
+    Returns the RunResult, or None if the application could not be determined.
+    """
+    from typesafe_sdk import AsyncTypeSafeClient
+
+    from jev_use.computers.mac import MacComputer, installed_apps
+    from jev_use.intent import parse_intent
+    from jev_use.prompts import DEFAULT_RULES
+    from jev_use.supervisor import Supervisor
+
+    overrides = _parse_inputs(args.input)
+    client = AsyncTypeSafeClient(api_key=key)
+    intent = await parse_intent(client, sentence, None if args.app else installed_apps())
+    app = args.app or intent.app
+    if not args.app and intent.app_confidence < APP_CONFIDENCE_FLOOR:
+        print(
+            f"not sure which app you mean (best guess {intent.app!r} at "
+            f"{intent.app_confidence:.2f}). Say it again, or pass --app.",
+            file=sys.stderr,
+        )
+        return None
+    inputs = {**intent.inputs, **overrides}
+    print(f"app:    {app}" + ("" if args.app else f"  ({intent.app_confidence:.2f})"))
+    print(f"typing: {', '.join(repr(v) for v in inputs.values()) or 'nothing'}")
+    print()
+
+    if args.trace == DEFAULT_DO_TRACE:
+        args.trace.unlink(missing_ok=True)
+    computer = await MacComputer.open(str(app))
+    try:
+        result = await run_loop(
+            goal=sentence,
+            computer=computer,
+            brain=JevBrain(client),
+            inputs=inputs,
+            rules=args.rule or list(DEFAULT_RULES),
+            thresholds=Thresholds(),
+            supervisor=None if args.no_supervisor else Supervisor(client),
+            max_steps=args.max_steps,
+            trace_path=args.trace,
+            dry_run=args.dry_run,
+        )
+    finally:
+        await computer.close()
+    # The intent request is part of what this command cost.
+    result.input_tokens += intent.input_tokens
+    result.cost_usd += intent.input_tokens / 1_000_000 * USD_PER_MTOK_INPUT
+    result.calls += 1
+    return result
+
+
+def _require_key() -> str | None:
     key = os.environ.get("TYPESAFE_API_KEY")
     if not key:
         print("TYPESAFE_API_KEY is not set. Put it in .env in the project root.", file=sys.stderr)
-        return 2
-    try:
-        overrides = _parse_inputs(args.input)
-    except ValueError as exc:
-        print(str(exc), file=sys.stderr)
-        return 2
-    try:
-        from typesafe_sdk import AsyncTypeSafeClient
+    return key
 
-        from jev_use.computers.mac import MacComputer, installed_apps
-        from jev_use.intent import parse_intent
-        from jev_use.prompts import DEFAULT_RULES
-        from jev_use.supervisor import Supervisor
+
+def _cmd_do(args: argparse.Namespace) -> int:
+    key = _require_key()
+    if key is None:
+        return 2
+    try:
+        result = asyncio.run(_do_sentence(key, args.sentence, args))
     except ImportError as exc:
         print(f"pyobjc is required for `do`: {exc}", file=sys.stderr)
         return 2
-
-    async def go() -> Any:
-        client = AsyncTypeSafeClient(api_key=key)
-        intent = await parse_intent(client, args.sentence, None if args.app else installed_apps())
-        app = args.app or intent.app
-        if not args.app and intent.app_confidence < APP_CONFIDENCE_FLOOR:
-            print(
-                f"not sure which app you mean (best guess {intent.app!r} at "
-                f"{intent.app_confidence:.2f}). Say it again, or pass --app.",
-                file=sys.stderr,
-            )
-            return None
-        inputs = {**intent.inputs, **overrides}
-        print(f"app:    {app}" + ("" if args.app else f"  ({intent.app_confidence:.2f})"))
-        print(f"typing: {', '.join(repr(v) for v in inputs.values()) or 'nothing'}")
-        print()
-
-        if args.trace == DEFAULT_DO_TRACE:
-            args.trace.unlink(missing_ok=True)
-        computer = await MacComputer.open(str(app))
-        try:
-            result = await run_loop(
-                goal=args.sentence,
-                computer=computer,
-                brain=JevBrain(client),
-                inputs=inputs,
-                rules=args.rule or list(DEFAULT_RULES),
-                thresholds=Thresholds(),
-                supervisor=None if args.no_supervisor else Supervisor(client),
-                max_steps=args.max_steps,
-                trace_path=args.trace,
-                dry_run=args.dry_run,
-            )
-        finally:
-            await computer.close()
-        # The intent request is part of what this command cost.
-        result.input_tokens += intent.input_tokens
-        result.cost_usd += intent.input_tokens / 1_000_000 * USD_PER_MTOK_INPUT
-        result.calls += 1
-        return result
-
-    try:
-        result = asyncio.run(go())
-    except (PermissionError, LookupError, RuntimeError) as exc:
+    except (ValueError, PermissionError, LookupError, RuntimeError) as exc:
         print(str(exc), file=sys.stderr)
         return 2
     if result is None:
         return 2
     _print_summary(result)
     return 0
+
+
+def _cmd_listen(args: argparse.Namespace) -> int:
+    key = _require_key()
+    if key is None:
+        return 2
+    try:
+        from jev_use.computers.mac import _activate, _frontmost_pid
+        from jev_use.voice import authorize, listen_once
+    except ImportError as exc:
+        print(f"pyobjc speech frameworks are required for `listen`: {exc}", file=sys.stderr)
+        return 2
+    try:
+        authorize()
+    except PermissionError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    # The terminal is frontmost right now. Remember it so it can be brought
+    # back after each command, ready for the next Enter.
+    terminal_pid = _frontmost_pid()
+    print("Press Enter, then say a command. Ctrl-C to quit.")
+    try:
+        while True:
+            input()
+            print("listening…", flush=True)
+            try:
+                heard = listen_once(
+                    args.locale, on_partial=lambda t: print(f"\r  {t}", end="", flush=True)
+                )
+            except (PermissionError, RuntimeError) as exc:
+                print(f"\n{exc}", file=sys.stderr)
+                return 2
+            print()
+            if not heard:
+                print("didn't catch that — press Enter and try again.")
+                continue
+            print(f"heard: {heard}\n")
+            try:
+                result = asyncio.run(_do_sentence(key, heard, args))
+            except (ValueError, PermissionError, LookupError, RuntimeError) as exc:
+                print(str(exc), file=sys.stderr)
+                result = None
+            if result is not None:
+                _print_summary(result)
+            if terminal_pid is not None:
+                _activate(terminal_pid)
+            if args.once:
+                return 0
+            print("\nPress Enter for the next command.")
+    except (KeyboardInterrupt, EOFError):
+        print()
+        return 0
 
 
 def _cmd_replay(args: argparse.Namespace) -> int:
@@ -369,6 +439,7 @@ def main(argv: list[str] | None = None) -> int:
         "run": _cmd_run,
         "replay": _cmd_replay,
         "do": _cmd_do,
+        "listen": _cmd_listen,
     }
     return int(handlers[args.command](args))
 

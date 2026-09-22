@@ -131,6 +131,17 @@ def _is_frontmost(pid: int) -> bool:
     return _attribute(app, "AXFrontmost") is True
 
 
+def _frontmost_pid() -> int | None:
+    """The pid of the frontmost application, read live through AX."""
+    for app in AppKit.NSWorkspace.sharedWorkspace().runningApplications():
+        if app.activationPolicy() != 0:
+            continue
+        pid = int(app.processIdentifier())
+        if _is_frontmost(pid):
+            return pid
+    return None
+
+
 def _activate(pid: int) -> None:
     AX.AXUIElementSetAttributeValue(AX.AXUIElementCreateApplication(pid), "AXFrontmost", True)
     if not _is_frontmost(pid):

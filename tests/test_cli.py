@@ -146,3 +146,19 @@ def test_do_without_a_key_fails_clearly(monkeypatch, capsys, tmp_path) -> None:
     monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
     assert main(["do", "open chrome"]) != 0
     assert "TYPESAFE_API_KEY" in capsys.readouterr().err
+
+
+def test_listen_accepts_the_same_options_as_do() -> None:
+    args = build_parser().parse_args(["listen", "--once", "--dry-run", "--app", "Notes"])
+    assert args.command == "listen"
+    assert args.once is True
+    assert args.dry_run is True
+    assert args.app == "Notes"
+    assert args.locale == "en-US"
+
+
+def test_listen_without_a_key_fails_clearly(monkeypatch, capsys, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+    assert main(["listen", "--once"]) != 0
+    assert "TYPESAFE_API_KEY" in capsys.readouterr().err
